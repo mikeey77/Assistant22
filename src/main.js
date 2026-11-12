@@ -1,5 +1,5 @@
 // Electron hoofdproces: tray-icoon, venster, IPC, updates en de engine.
-const { app, BrowserWindow, Tray, Menu, ipcMain, shell, safeStorage, nativeImage, powerMonitor } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, shell, safeStorage, nativeImage, powerMonitor, nativeTheme } = require('electron');
 const path = require('path');
 const { Config } = require('./config');
 const { Engine } = require('./engine');
@@ -41,6 +41,12 @@ function crypt() {
   };
 }
 
+function applyTheme() {
+  const t = config.data.theme || 'auto';
+  nativeTheme.themeSource = t === 'auto' ? 'system' : t;
+  if (win && !win.isDestroyed()) win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#16181c' : '#f6f5f2');
+}
+
 function showWindow() {
   if (win) {
     win.show();
@@ -55,7 +61,7 @@ function showWindow() {
     title: 'Assistant22',
     icon: ICON,
     autoHideMenuBar: true,
-    backgroundColor: '#f6f5f2',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#16181c' : '#f6f5f2',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
   win.loadFile(path.join(__dirname, 'ui', 'index.html'));
@@ -89,7 +95,9 @@ function buildTray() {
       label: nl ? 'Safe mode (eerst toestemming)' : 'Safe mode (ask first)', type: 'checkbox', checked: c.safeMode,
       click: (item) => { config.update({ safeMode: item.checked }); send('config', config.publicView()); },
     },
-    ...(updateState.state === 'ready' ? [{ label: nl ? 'Update installeren' : 'Install update', click: () => installUpdate() }] : []),
+    updateState.state === 'ready'
+      ? { label: nl ? `Update ${updateState.version} installeren` : `Install update ${updateState.version}`, click: () => installUpdate() }
+      : { label: nl ? 'Zoek naar updates' : 'Check for updates', enabled: !!updater, click: () => updater && updater.checkForUpdates().catch(() => {}) },
     { type: 'separator' },
     { label: nl ? 'Afsluiten' : 'Quit', click: () => { quitting = true; app.quit(); } },
   ]));
@@ -140,6 +148,7 @@ function registerIpc() {
   ipcMain.handle('config:get', wrap(() => config.publicView()));
   ipcMain.handle('config:save', wrap((partial) => {
     config.update(partial);
+    if ('theme' in partial) applyTheme();
     buildTray();
     applyLogin();
     if (config.data.setupDone && (partial.telegram || partial.google || partial.imap || partial.whatsapp)) engine.start();
@@ -228,7 +237,11 @@ function registerIpc() {
   ipcMain.handle('engine:check', wrap(async () => { await engine.check({ manual: true }); return engine.status(); }));
   ipcMain.handle('update:check', wrap(async () => {
     if (!updater) return { state: 'dev' };
-    await updater.checkForUpdates();
+    const r = await updater.checkForUpdates();
+    if (updateState.state === 'checking' || updateState.state === 'idle') {
+      const v = r && r.updateInfo && r.updateInfo.version;
+      updateState = v && v !== app.getVersion() ? { state: 'downloading', version: v } : { state: 'none' };
+    }
     return updateState;
   }));
   ipcMain.handle('update:install', wrap(() => installUpdate()));
@@ -293,6 +306,8 @@ app.whenReady().then(async () => {
   engine.on('wa', (w) => send('wa', w));
   engine.on('usage', (u) => send('usage', u));
 
+  applyTheme();
+  nativeTheme.on('updated', () => { if (win && !win.isDestroyed()) win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#16181c' : '#f6f5f2'); });
   registerIpc();
   buildTray();
   applyLogin();

@@ -13,6 +13,7 @@ class WhatsApp extends EventEmitter {
     this.user = null;
     this.selfJids = new Set();
     this.sentIds = new Set();
+    this.seenIds = new Set();
     this.stopped = false;
     this.retries = 0;
   }
@@ -28,6 +29,8 @@ class WhatsApp extends EventEmitter {
     const { state, saveCreds } = await B.useMultiFileAuthState(this.authDir);
     let version;
     try { ({ version } = await B.fetchLatestBaileysVersion()); } catch { /* standaardversie */ }
+    // berichtenopslag voor opnieuw versturen bij decryptiefouten
+    const store = this.msgStore || (this.msgStore = new Map());
     const logger = require('pino')({ level: 'silent' });
     const sock = makeWASocket({
       version,
@@ -37,6 +40,7 @@ class WhatsApp extends EventEmitter {
       markOnlineOnConnect: false, // anders krijg je op je telefoon geen meldingen meer
       syncFullHistory: false,
       generateHighQualityLinkPreview: false,
+      getMessage: async (key) => store.get(key.id),
     });
     this.sock = sock;
     this.B = B;
@@ -75,21 +79,33 @@ class WhatsApp extends EventEmitter {
     });
 
     sock.ev.on('messages.upsert', ({ messages, type }) => {
-      if (type !== 'notify') return;
+      // 'notify' = nieuw binnen, 'append' = binnengekomen terwijl de app uit stond
+      const since = Date.now() / 1000 - 24 * 3600;
       for (const m of messages) {
+        if (type !== 'notify' && Number(m.messageTimestamp || 0) < since) continue;
+        if (this.seenIds.has(m.key.id)) continue;
+        this.seenIds.add(m.key.id);
         try { this._handle(m); } catch (e) { this.emit('error', e); }
       }
+      if (this.seenIds.size > 2000) this.seenIds = new Set([...this.seenIds].slice(-1000));
     });
   }
 
   _handle(m) {
     const B = this.B;
     const jid = m.key.remoteJid;
-    if (!jid || !m.message) return;
+    if (!jid) return;
+    if (!m.message) {
+      if (!m.key.fromMe && m.messageStubType) this.emit('debug', 'message could not be decrypted yet (WhatsApp will retry)');
+      return;
+    }
     if (this.sentIds.has(m.key.id)) return; // eigen bot-bericht
     if (B.isJidBroadcast(jid) || B.isJidStatusBroadcast(jid) || jid.endsWith('@newsletter')) return;
     const text = extractText(m.message);
-    if (!text) return;
+    if (!text) {
+      if (!m.key.fromMe) this.emit('debug', `skipped non-text message (${Object.keys(m.message).join(',')})`);
+      return;
+    }
     const isSelf = this.selfJids.has(B.jidNormalizedUser(jid));
     if (isSelf) return; // je eigen chat negeren
     if (m.key.fromMe) return;
@@ -110,7 +126,11 @@ class WhatsApp extends EventEmitter {
   async send(jid, text) {
     if (!this.sock || !this.connected) throw new Error('WhatsApp is not connected');
     const r = await this.sock.sendMessage(jid, { text });
-    if (r && r.key) this.sentIds.add(r.key.id);
+    if (r && r.key) {
+      this.sentIds.add(r.key.id);
+      this.msgStore.set(r.key.id, r.message);
+      if (this.msgStore.size > 200) this.msgStore.delete(this.msgStore.keys().next().value);
+    }
     if (this.sentIds.size > 500) this.sentIds = new Set([...this.sentIds].slice(-200));
     return r;
   }

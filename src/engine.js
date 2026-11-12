@@ -167,6 +167,7 @@ class Engine extends EventEmitter {
     });
     wa.on('error', (e) => this.addLog('WhatsApp: ' + e.message, 'error'));
     wa.on('message', (m) => this.onWaMessage(m));
+    wa.on('debug', (d) => this.addLog('WhatsApp: ' + d));
     this.wa = wa;
     return wa;
   }
@@ -315,7 +316,9 @@ class Engine extends EventEmitter {
   }
 
   onWaMessage(m) {
-    if (m.isGroup && !this.c.whatsapp.groups) return;
+    if (m.isGroup && !this.c.whatsapp.groups) { this.addLog(`WhatsApp: group message skipped (${m.name})`); return; }
+    if (this.st.waQueue.some((x) => x.id === m.id)) return;
+    this.addLog(`WhatsApp: new message from ${m.name}`);
     if (m.phone) {
       this.st.waJids = this.st.waJids || {};
       this.st.waJids[m.phone] = m.jid;
@@ -325,10 +328,14 @@ class Engine extends EventEmitter {
     this.st.waQueue.push(m);
     if (this.st.waQueue.length > 100) this.st.waQueue = this.st.waQueue.slice(-100);
     this.config.save();
-    // VIP? Dan niet wachten op de volgende ronde.
-    if (this.isVip({ from: m.name, phone: m.phone })) {
-      clearTimeout(this._vipTimer);
-      this._vipTimer = setTimeout(() => this.check(), 5000);
+    // Niet wachten op de volgende ronde: VIP na 5 sec, anderen na 2 min (gebundeld).
+    const vip = this.isVip({ from: m.name, phone: m.phone });
+    if (vip || this.c.whatsapp.quickCheck !== false) {
+      const wait = vip ? 5000 : 120000;
+      if (!this._waTimer || vip) {
+        clearTimeout(this._waTimer);
+        this._waTimer = setTimeout(() => { this._waTimer = null; if (this.c.setupDone) this.check(); }, wait);
+      }
     }
   }
 
@@ -694,7 +701,7 @@ class Engine extends EventEmitter {
 
   basePrompt() {
     const now = new Date().toLocaleString('en-GB', { timeZone: TZ, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    return `You are Assistant22, a simple email, WhatsApp and calendar assistant.
+    return `You are Assistant22, the user's personal assistant. You read their email and WhatsApp messages for them, keep their calendar up to date and talk to them via Telegram. Act on their behalf, but never send anything without their approval.
 Write every text for the user (summaries, replies, calendar titles, answers) in ${pack(this.lang).claudeLanguage}, unless a reply to someone should match the language they wrote in.
 Current date/time: ${now} (time zone ${TZ}).
 
@@ -970,7 +977,8 @@ Return ONLY JSON: {"body":"the new full reply text"}`;
   async ask(question, channel) {
     try {
       const events = await this.upcomingEvents(30);
-      const recent = this.st.recent.slice(-25).map((r) => `- ${r.date} | ${r.source || 'mail'} | ${r.from} | ${r.subject || ''} | ${r.summary}`).join('\n') || '(none)';
+      const queued = this.st.waQueue.slice(-15).map((m) => `- ${m.date} | whatsapp (not judged yet) | ${m.name} | ${m.text.slice(0, 300)}`);
+      const recent = [...this.st.recent.slice(-25).map((r) => `- ${r.date} | ${r.source || 'mail'} | ${r.from} | ${r.subject || ''} | ${r.summary}`), ...queued].join('\n') || '(none)';
       const prompt = `${this.basePrompt()}
 
 CALENDAR (next 30 days):

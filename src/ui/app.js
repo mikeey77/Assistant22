@@ -450,16 +450,18 @@ async function refreshStatus() {
   s.log.forEach(addLogLine);
 }
 
-function showUpdate(u) {
+function showUpdate(u, key) {
   if (!u) return;
   const box = $('#stUpdate');
   const txt = u.state === 'downloading' ? L('update_found', { v: u.version }) : u.state === 'ready' ? L('update_ready', { v: u.version }) : '';
   box.classList.toggle('hidden', !txt);
   $('#stUpdateText').textContent = txt;
   $('#btnRestart').classList.toggle('hidden', u.state !== 'ready');
-  if (u.state === 'none') setResult('update', L('up_to_date'), 'ok');
-  else if (u.state === 'error') setResult('update', '❌ ' + u.error, 'err');
-  else if (txt) setResult('update', txt, 'busy');
+  for (const k of key ? [key] : ['update', 'update2']) {
+    if (u.state === 'none') setResult(k, L('up_to_date'), 'ok');
+    else if (u.state === 'error') setResult(k, '❌ ' + u.error, 'err');
+    else if (txt) setResult(k, txt, 'busy');
+  }
 }
 
 // ---------- init ----------
@@ -475,7 +477,7 @@ async function init() {
   fill();
 
   const info = await postvak.appInfo();
-  if (info.ok) { $('#appVersion').textContent = info.data.version; showUpdate(info.data.update); }
+  if (info.ok) { for (const v of $$('.appVersion')) v.textContent = info.data.version; showUpdate(info.data.update); }
 
   $('#btnNext').onclick = next;
   $('#mailType').onchange = showMailType;
@@ -524,13 +526,16 @@ async function init() {
     await postvak.checkNow();
     refreshStatus();
   };
-  $('#btnUpdate').onclick = async () => {
-    setResult('update', '…', 'busy');
+  const checkUpd = (key) => async () => {
+    setResult(key, '…', 'busy');
     const u = await postvak.checkUpdate();
-    if (!u.ok) return setResult('update', '❌ ' + u.error, 'err');
-    if (u.data.state === 'dev') return setResult('update', 'dev', 'busy');
-    showUpdate(u.data);
+    if (!u.ok) return setResult(key, '❌ ' + u.error, 'err');
+    if (u.data.state === 'dev') return setResult(key, L('update_dev'), 'busy');
+    showUpdate(u.data, key);
   };
+  $('#btnUpdate').onclick = checkUpd('update');
+  $('#btnUpdate2').onclick = checkUpd('update2');
+  $('#themePick').onchange = async (e) => { const r2 = await postvak.saveConfig({ theme: e.target.value }); if (r2.ok) cfg = r2.data; };
   $('#btnRestart').onclick = () => postvak.installUpdate();
   $('#btnResetRules').onclick = async () => {
     const d = await postvak.defaultRules();

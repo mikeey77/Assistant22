@@ -46,7 +46,12 @@
         </div>
         <div class="alert err hidden" id="stError"></div>
         <div class="alert info hidden" id="stUpdate"><span id="stUpdateText"></span> <button class="btn small hidden" id="btnRestart" data-i18n="restart_now"></button></div>
-        <div class="row"><button class="btn primary" id="btnCheck" data-i18n="check_now"></button></div>
+        <div class="row">
+          <button class="btn primary" id="btnCheck" data-i18n="check_now"></button>
+          <button class="btn" id="btnUpdate2" data-i18n="update_check"></button>
+          <span class="muted"><span data-i18n="version"></span> <span class="appVersion"></span></span>
+          <span class="result" data-result="update2"></span>
+        </div>
         <h3 data-i18n="log"></h3>
         <div class="log" id="log"></div>
       </section>
@@ -56,6 +61,13 @@
         <h1 data-i18n="general_h"></h1>
         <div class="grid">
           <label><span data-i18n="language"></span><select class="langPick"></select></label>
+          <label><span data-i18n="theme"></span>
+            <select data-path="theme" id="themePick">
+              <option value="auto" data-i18n="theme_auto"></option>
+              <option value="light" data-i18n="theme_light"></option>
+              <option value="dark" data-i18n="theme_dark"></option>
+            </select>
+          </label>
           <label><span data-i18n="interval"></span>
             <select data-path="intervalMin" data-num>
               <option value="5">5</option><option value="15">15</option><option value="30">30</option><option value="60">60</option>
@@ -72,7 +84,7 @@
           <label><span data-i18n="usage_limit"></span><input data-path="usageLimit.dailyTokens" type="number" min="0" step="10000" /></label>
         </div>
         <label class="inline"><input type="checkbox" data-path="usageLimit.pause" /> <span data-i18n="usage_pause"></span></label>
-        <div class="row only-settings"><span class="muted"><span data-i18n="version"></span> <span id="appVersion"></span></span><button class="btn small" id="btnUpdate" data-i18n="check_updates"></button><span class="result" data-result="update"></span></div>
+        <div class="row only-settings"><span class="muted"><span data-i18n="version"></span> <span class="appVersion"></span></span><button class="btn small" id="btnUpdate" data-i18n="check_updates"></button><span class="result" data-result="update"></span></div>
       </section>
 
       <!-- SAFE MODE -->
@@ -125,6 +137,7 @@
           </div>
           <div class="qr hidden" id="waQr"><img id="waQrImg" alt="QR" /><p class="muted" data-i18n="wa_scan"></p></div>
           <label class="inline"><input type="checkbox" data-path="whatsapp.groups" /> <span data-i18n="wa_groups"></span></label>
+          <label class="inline"><input type="checkbox" data-path="whatsapp.quickCheck" /> <span data-i18n="wa_quick"></span></label>
         </div>
       </section>
 

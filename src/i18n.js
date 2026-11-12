@@ -107,6 +107,9 @@ const STRINGS = {
       err_mail: 'Fill in your IMAP details (and test them).', err_client_id: 'Enter the Client ID first.', err_client_secret: 'Enter the Client secret.', err_token: 'Enter your bot token first.',
       running: 'Assistant22 is running! You\'ll get a message shortly.',
       step_ai: 'AI', step_google: 'Google', step_plugins: 'Plugins',
+      theme: 'Theme', theme_auto: 'Automatic (device)', theme_light: 'Light', theme_dark: 'Dark',
+      wa_quick: 'Check new WhatsApp messages within 2 minutes (instead of waiting for the next round)',
+      update_check: 'Check for updates', update_dev: 'Updates only work in the installed app',
       ai_h: 'AI brain', ai_lead: 'Choose which AI reads your messages. A subscription CLI (Claude Code or ChatGPT Codex) costs nothing extra; API keys are pay-per-use; Ollama runs free on your own computer.',
       provider: 'Provider', api_key: 'API key', get_key: 'Get a key', base_url: 'Server URL', test_ai: 'Test AI', ai_ok: '✅ AI replies: "{r}"', model_placeholder: 'default: {m}',
       codex_install: 'Install: <code>npm i -g @openai/codex</code>, then run <code>codex login</code> once (sign in with ChatGPT).',
@@ -118,11 +121,13 @@ const STRINGS = {
       gmail_ok: '✅ Gmail: {e}', test_gmail: 'Test Gmail',
       google_h: 'Google (Calendar & Gmail)', google_gmail: 'Also use Gmail for email',
     },
-    defaultRules: `- Only notify me about messages that really need attention (personal, school, work, bills, appointments).
-- Newsletters, ads and automatic notifications: ignore.
+    defaultRules: `You are my personal assistant. You read my email and WhatsApp messages for me, keep my calendar up to date and tell me via Telegram what I need to know.
+- Notify me only about messages that need my attention: personal messages, school/work, bills, appointments and deadlines.
+- Ignore newsletters, ads, promotions and automatic notifications.
 - If a message mentions an appointment, date or deadline, suggest a calendar item.
-- Calendar titles: short, start with a fitting emoji.
-- Only suggest a reply when someone clearly asks me something.`,
+- If someone asks me something directly, suggest a short reply in my style: friendly and to the point.
+- Calendar titles: short, starting with a fitting emoji.
+- When in doubt, notify me rather than ignore it.`,
   },
   nl: {
     locale: 'nl-NL',
@@ -230,6 +235,9 @@ const STRINGS = {
       err_mail: 'Vul je IMAP-gegevens in (en test ze even).', err_client_id: 'Vul eerst het Client ID in.', err_client_secret: 'Vul het Client secret in.', err_token: 'Vul eerst je bot token in.',
       running: 'Assistant22 draait! Je krijgt zo een bericht.',
       step_ai: 'AI', step_google: 'Google', step_plugins: 'Plugins',
+      theme: 'Thema', theme_auto: 'Automatisch (apparaat)', theme_light: 'Licht', theme_dark: 'Donker',
+      wa_quick: 'Nieuwe WhatsApp-berichten binnen 2 minuten checken (niet wachten op de volgende ronde)',
+      update_check: 'Zoek naar updates', update_dev: 'Updates werken alleen in de geïnstalleerde app',
       ai_h: 'AI-brein', ai_lead: 'Kies welke AI je berichten leest. Een abonnement-CLI (Claude Code of ChatGPT Codex) kost niets extra; API-keys betaal je per gebruik; Ollama draait gratis op je eigen computer.',
       provider: 'Provider', api_key: 'API-key', get_key: 'Key aanvragen', base_url: 'Server-URL', test_ai: 'Test AI', ai_ok: '✅ AI antwoordt: "{r}"', model_placeholder: 'standaard: {m}',
       codex_install: 'Installeren: <code>npm i -g @openai/codex</code>, daarna één keer <code>codex login</code> (inloggen met ChatGPT).',
@@ -241,11 +249,13 @@ const STRINGS = {
       gmail_ok: '✅ Gmail: {e}', test_gmail: 'Test Gmail',
       google_h: 'Google (Agenda & Gmail)', google_gmail: 'Gmail ook gebruiken voor mail',
     },
-    defaultRules: `- Meld me alleen berichten die echt aandacht nodig hebben (persoonlijk, school, werk, rekeningen, afspraken).
-- Nieuwsbrieven, reclame en automatische meldingen: negeren.
+    defaultRules: `Je bent mijn persoonlijke assistent. Je leest mijn mail en WhatsApp-berichten voor me, houdt mijn agenda bij en laat me via Telegram weten wat ik moet weten.
+- Meld me alleen berichten die echt aandacht nodig hebben: persoonlijke berichten, school/werk, rekeningen, afspraken en deadlines.
+- Negeer nieuwsbrieven, reclame, aanbiedingen en automatische meldingen.
 - Staat er een afspraak, datum of deadline in een bericht? Stel een agenda-item voor.
-- Agendatitels: kort, begin met een passende emoji.
-- Stel alleen een antwoord voor als iemand mij duidelijk iets vraagt.`,
+- Vraagt iemand mij direct iets? Stel een kort antwoord voor in mijn stijl: vriendelijk en to the point.
+- Agendatitels: kort, beginnend met een passende emoji.
+- Twijfel je? Meld het me liever dan dat je het negeert.`,
   },
 };
 

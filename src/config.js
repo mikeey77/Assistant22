@@ -55,7 +55,8 @@ const DEFAULTS = {
   smtp: { host: '', port: 465, secure: true, user: '', pass: '', fromName: '' },
   google: { clientId: '', clientSecret: '', refreshToken: '', calendarId: 'primary' },
   telegram: { token: '', chatId: null },
-  whatsapp: { enabled: false, groups: false },
+  whatsapp: { enabled: false, groups: false, quickCheck: true },
+  theme: 'auto', // auto | light | dark
   state: { lastUid: null, uidValidity: null, lastSummaryDate: null, pending: {}, recent: [], lastCheck: null, lastError: null, waQueue: [], waJids: {}, candidates: {}, usage: {}, plugins: {}, running: false, lastSeen: null, gmailLastTs: null },
 };
 

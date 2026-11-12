@@ -1,7 +1,7 @@
 {
   "name": "postvak",
   "productName": "Assistant22",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Assistant22: a simple email, WhatsApp and calendar assistant for Windows, powered by AI and Telegram",
   "main": "src/main.js",
   "author": "Michael",

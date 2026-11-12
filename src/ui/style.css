@@ -152,3 +152,34 @@ body.settings-mode .only-settings { display: flex; }
 .plugin.off { opacity: .8; }
 .switch { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 600; cursor: pointer; }
 .switch input { width: 18px; height: 18px; margin: 0; }
+
+/* v0.4.1: donker thema (volgt het apparaat of je eigen keuze) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181c;
+    --panel: #1f2227;
+    --side: #0f1114;
+    --side-text: #aeb4bc;
+    --text: #e6e8eb;
+    --muted: #8d949d;
+    --line: #2d3138;
+    --accent: #4d86f7;
+    --accent-soft: #1d2a45;
+    --ok: #3ccb7f;
+    --err: #ff6b62;
+  }
+  .lead { color: #c3c8ce; }
+  code { background: #2a2e35; }
+  .usagebar { background: var(--panel); }
+  .ub-meter { background: #2d3138; }
+  .alert.err { background: #3a1f1f; }
+  .alert.warn { background: #3a2f17; color: #f3c766; }
+  .alert.info { background: var(--accent-soft); color: #9dbbff; }
+  .btn:hover { border-color: #454b55; }
+  .nav-item:hover:not(:disabled) { background: #1b1e23; }
+  .nav-item.on { background: #23272d; }
+  .qr img { background: #fff; }
+  .toast { background: #e6e8eb; color: #16181c; }
+  input, select, textarea { color-scheme: dark; }
+  .opt.on { background: var(--accent-soft); }
+}

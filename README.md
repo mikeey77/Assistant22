@@ -9,7 +9,7 @@ notifications, approvals, sending emails or WhatsApps and changing settings.
 
 ## Features
 - **Email**: Gmail (Google login) or any IMAP/SMTP account, settings detected from your address
-- **WhatsApp** (optional): checked like an extra inbox; send WhatsApps from Telegram
+- **WhatsApp** (optional): checked like an extra inbox (new chats within 2 minutes); send WhatsApps from Telegram
 - **Google Calendar**: appointments from messages, daily overview every morning
 - **Choose your AI**: Claude Code or ChatGPT Codex (on your subscription), Claude / OpenAI / Grok / Gemini API keys, or Ollama (local)
 - **Usage bar**: tokens, calls and cost today and this month, optional daily limit that pauses the AI
@@ -19,7 +19,8 @@ notifications, approvals, sending emails or WhatsApps and changing settings.
 - **Contacts**: in the app, from Telegram, or tap 👤 under a notification
 - **Settings from Telegram**: `/settings` buttons, or just type "check every 30 minutes"
 - **Online/offline messages**: Telegram tells you when the app closes, the PC sleeps, or it was offline unexpectedly
-- English / Dutch, automatic updates via GitHub Releases
+- Light / dark / automatic theme (follows your device), English / Dutch
+- Automatic updates via GitHub Releases, or check manually from the dashboard or tray menu
 
 ## Plugins
 Off by default: turn them on in the app (**Plugins**) or in Telegram (`/plugins`).
