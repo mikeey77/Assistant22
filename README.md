@@ -60,12 +60,12 @@ npm run release    # build + publish to GitHub Releases (needs GH_TOKEN)
 ```
 
 ## Publishing an update
-1. Raise `version` in `package.json` (e.g. 0.2.0 → 0.2.1).
-2. `set GH_TOKEN=<your GitHub token>` then `npm run release`
-   – or upload `Postvak-Setup-x.y.z.exe`, `.blockmap` and `latest.yml` from `dist/`
-   by hand to a new GitHub Release (tag `vx.y.z`) in `mikeey77/Assistant22`.
-3. Installed copies download it automatically and install it on the next restart.
-   Settings are kept (`%APPDATA%\Postvak`).
+1. Raise `version` in `package.json` (e.g. 0.3.0 → 0.3.1) and push to `main`.
+2. On GitHub: **Actions → Release → Run workflow** (or push a tag like `v0.3.1`).
+   The workflow builds the installer on Windows and publishes a GitHub Release
+   with `latest.yml`.
+3. Installed copies download the update automatically and install it on the next
+   restart. Settings are kept (`%APPDATA%\Postvak`).
 
 ## Structure
 ```
