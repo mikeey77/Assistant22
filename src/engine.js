@@ -88,6 +88,7 @@ class Engine extends EventEmitter {
     if (this.c.telegram.token) {
       this.tg = new this.deps.Telegram(this.c.telegram.token);
       this.tg.poll((u) => this.handleUpdate(u));
+      this.setCommands();
     }
     if (this.c.whatsapp.enabled && this.waAuthDir) {
       const wa = this.ensureWa();
@@ -184,6 +185,76 @@ class Engine extends EventEmitter {
     this.waInfo = null;
   }
 
+  // ---------- antwoorden vanuit Telegram ----------
+  saveThread(item) {
+    this.st.threads = this.st.threads || {};
+    const rid = 't' + crypto.randomBytes(3).toString('hex');
+    this.st.threads[rid] = {
+      source: item.source, jid: item.jid, phone: item.phone, from: item.from, fromAddress: item.fromAddress,
+      subject: item.subject, messageId: item.messageId, threadId: item.threadId, body: String(item.body || '').slice(0, 1500), t: Date.now(),
+    };
+    const keys = Object.keys(this.st.threads);
+    if (keys.length > 100) delete this.st.threads[keys[0]];
+    return rid;
+  }
+
+  mapMsg(messageId, target) {
+    if (!messageId) return;
+    this.st.tgMap = this.st.tgMap || {};
+    this.st.tgMap[messageId] = target;
+    const keys = Object.keys(this.st.tgMap);
+    if (keys.length > 300) delete this.st.tgMap[keys[0]];
+    this.config.save();
+  }
+
+  threadName(th) {
+    return th.source === 'whatsapp' ? `💬 ${th.from}` : `📧 ${th.from || th.fromAddress}`;
+  }
+
+  // Jouw eigen tekst als antwoord: eerst laten zien, dan pas versturen.
+  async replyWithText(rid, text) {
+    const th = this.st.threads && this.st.threads[rid];
+    if (!th) return this.notify(this.T('handled'));
+    await this.handleAction({ type: 'draft_reply', body: text }, { ...th, source: th.source });
+  }
+
+  async aiReply(rid, hint = '') {
+    const th = this.st.threads && this.st.threads[rid];
+    if (!th) return this.notify(this.T('handled'));
+    try {
+      const prompt = `${this.basePrompt()}
+
+${th.source === 'whatsapp' ? 'WHATSAPP' : 'EMAIL'} FROM ${th.from}${th.subject ? '\nSUBJECT: ' + th.subject : ''}:
+${th.body}
+${hint ? '\nTHE USER WANTS TO SAY: ' + hint : ''}
+
+Write the reply the user would send${th.source === 'whatsapp' ? ' (short and informal, like a chat message)' : ''}. Return ONLY JSON: {"body":"reply text"}`;
+      const data = this.deps.claude.extractJson(await this.ai(prompt));
+      if (!data.body) throw new Error('Empty reply');
+      await this.handleAction({ type: 'draft_reply', body: data.body }, { ...th });
+    } catch (e) {
+      await this.notify(this.T('couldNot', { err: esc(e.message) }));
+    }
+  }
+
+  async startReply(rid) {
+    const th = this.st.threads && this.st.threads[rid];
+    if (!th) return this.notify(this.T('handled'));
+    this.replying = rid;
+    if (!this.tg) return;
+    const m = await this.tg.send(this.c.telegram.chatId, this.T('typeReply', { to: esc(this.threadName(th)) }), undefined, { forceReply: this.T('replyPlaceholder') }).catch(() => null);
+    if (m) this.mapMsg(m.message_id, { thread: rid });
+  }
+
+  async setCommands() {
+    if (!this.tg) return;
+    const nl = this.lang === 'nl';
+    const cmds = nl
+      ? [['check', 'Nu checken'], ['vandaag', 'Agenda van vandaag'], ['instellingen', 'Instellingen'], ['plugins', 'Plugins aan/uit'], ['contacten', 'Je contacten'], ['verbruik', 'Tokenverbruik'], ['status', 'Status'], ['help', 'Hulp']]
+      : [['check', 'Check now'], ['today', 'Today\'s agenda'], ['settings', 'Settings'], ['plugins', 'Plugins on/off'], ['contacts', 'Your contacts'], ['usage', 'Token usage'], ['status', 'Status'], ['help', 'Help']];
+    try { await this.tg.call('setMyCommands', { commands: cmds.map(([command, description]) => ({ command, description })) }); } catch { /* niet erg */ }
+  }
+
   // ---------- instellingen via Telegram ----------
   applySetting(key, value) {
     const bool = (v) => v === true || /^(true|on|aan|1|yes|ja)$/i.test(String(v));
@@ -191,7 +262,7 @@ class Engine extends EventEmitter {
     let patch;
     if (k === 'safeMode') patch = { safeMode: bool(value) };
     else if (k === 'intervalMin') patch = { intervalMin: Math.min(240, Math.max(5, Number(value) || 15)) };
-    else if (k === 'language') patch = { language: /^nl|dutch|nederlands/i.test(String(value)) ? 'nl' : 'en' };
+    else if (k === 'language') { patch = { language: /^nl|dutch|nederlands/i.test(String(value)) ? 'nl' : 'en' }; setTimeout(() => this.setCommands()); }
     else if (k === 'dailySummary.enabled') patch = { dailySummary: { enabled: bool(value) } };
     else if (k === 'dailySummary.time' && /^\d{1,2}:\d{2}$/.test(value)) patch = { dailySummary: { time: String(value).padStart(5, '0') } };
     else if (k === 'quietNonUrgent') patch = { quietNonUrgent: bool(value) };
@@ -254,7 +325,7 @@ class Engine extends EventEmitter {
     let kb = this.settingsKeyboard();
     let text = '⚙️ <b>' + this.T('settings') + '</b>';
     if (what === 'safe') this.config.update({ safeMode: !c.safeMode });
-    if (what === 'lang') this.config.update({ language: c.language === 'nl' ? 'en' : 'nl' });
+    if (what === 'lang') { this.config.update({ language: c.language === 'nl' ? 'en' : 'nl' }); this.setCommands(); }
     if (what === 'int') this.config.update({ intervalMin: INTERVALS[(INTERVALS.indexOf(Number(c.intervalMin)) + 1) % INTERVALS.length] });
     if (what === 'daily') this.config.update({ dailySummary: { enabled: !c.dailySummary.enabled } });
     if (what === 'quiet') this.config.update({ quietNonUrgent: !c.quietNonUrgent });
@@ -384,7 +455,14 @@ class Engine extends EventEmitter {
 
     if (cb) return this.handleButton(cb);
     const text = (msg.text || '').trim();
-    if (text) return this.handleText(text, 'telegram');
+    if (!text) return;
+    const target = msg.reply_to_message && this.st.tgMap && this.st.tgMap[msg.reply_to_message.message_id];
+    if (target && !text.startsWith('/')) {
+      this.replying = null;
+      if (target.thread) return this.replyWithText(target.thread, text);
+      if (target.pending) return this.rewrite(target.pending, text);
+    }
+    return this.handleText(text, 'telegram');
   }
 
   reply(channel, html) { return this.sendTo(channel, html); }
@@ -403,6 +481,16 @@ class Engine extends EventEmitter {
       return this.decide(verb, arg, { channel });
     }
 
+    if (cmd === 'cancel' || cmd === 'annuleer') {
+      this.replying = null;
+      this.editing = null;
+      return this.reply(channel, this.T('cancelled'));
+    }
+    if (this.replying && !isSlash) {
+      const rid = this.replying;
+      this.replying = null;
+      return this.replyWithText(rid, text);
+    }
     if (this.editing && !isSlash) {
       const id = this.editing;
       this.editing = null;
@@ -450,6 +538,8 @@ class Engine extends EventEmitter {
   async handleButton(cb) {
     const [kind, id] = String(cb.data || '').split(':');
     if (kind === 'cfg') return this.handleSettingsButton(cb, id);
+    if (kind === 'rp') { await this.tg.answerCallback(cb.id, '✍️'); return this.startReply(id); }
+    if (kind === 'ar') { await this.tg.answerCallback(cb.id, '✨'); await this.notify(this.T('writing')); return this.aiReply(id); }
     if (kind === 'pl') {
       const on = !(this.c.plugins[id] && this.c.plugins[id].enabled);
       this.setPlugin(id, on);
@@ -610,7 +700,8 @@ class Engine extends EventEmitter {
     }
     if (action.type === 'draft_reply') {
       const to = item ? (item.source === 'whatsapp' ? '💬 ' + item.from : item.fromAddress || item.from) : '?';
-      return `${this.T('sendReply', { to: esc(to) })}\n\n${esc(action.body)}`;
+      const quote = item && item.body ? `\n<i>↩︎ “${esc(String(item.body).slice(-200))}”</i>` : '';
+      return `${this.T('sendReply', { to: esc(to) })}${quote}\n\n${esc(action.body)}\n\n<i>${this.T('swipeHint')}</i>`;
     }
     return esc(JSON.stringify(action));
   }
@@ -618,7 +709,8 @@ class Engine extends EventEmitter {
   buttons(id, action) {
     const row2 = [{ text: this.T('later1h'), callback_data: 's1:' + id }, { text: this.T('laterTomorrow'), callback_data: 'st:' + id }];
     if (EDITABLE.includes(action.type)) row2.push({ text: this.T('edit'), callback_data: 'ed:' + id });
-    return [[{ text: this.T('approve'), callback_data: 'ok:' + id }, { text: this.T('decline'), callback_data: 'no:' + id }], row2];
+    const okText = NEEDS_OK.includes(action.type) && action.type !== 'draft_response' ? this.T('sendBtn') : this.T('approve');
+    return [[{ text: okText, callback_data: 'ok:' + id }, { text: this.T('decline'), callback_data: 'no:' + id }], row2];
   }
 
   // Vul toAddress/toPhone/toName in vanuit een naam, e-mailadres of nummer.
@@ -655,7 +747,9 @@ class Engine extends EventEmitter {
 
   async askApproval(id, p, { reminder = false, urgent = false } = {}) {
     const head = reminder ? this.T('reminder') + '\n' : '';
-    return this.notify(head + this.describe(p.action, p.item), { buttons: this.buttons(id, p.action), urgent, loud: reminder });
+    const r = await this.notify(head + this.describe(p.action, p.item), { buttons: this.buttons(id, p.action), urgent, loud: reminder });
+    if (r && r.telegram && EDITABLE.includes(p.action.type)) this.mapMsg(r.telegram.message_id, { pending: id });
+    return r;
   }
 
   async handleAction(action, item, { urgent = false } = {}) {
@@ -702,7 +796,7 @@ class Engine extends EventEmitter {
   basePrompt() {
     const now = new Date().toLocaleString('en-GB', { timeZone: TZ, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     return `You are Assistant22, the user's personal assistant. You read their email and WhatsApp messages for them, keep their calendar up to date and talk to them via Telegram. Act on their behalf, but never send anything without their approval.
-Write every text for the user (summaries, replies, calendar titles, answers) in ${pack(this.lang).claudeLanguage}, unless a reply to someone should match the language they wrote in.
+LANGUAGE: write ALL text for the user (summaries, reasons, answers, calendar titles) in ${pack(this.lang).claudeLanguage}. Only replies to other people may follow the language they wrote in.
 Current date/time: ${now} (time zone ${TZ}).
 
 USER RULES:
@@ -917,10 +1011,15 @@ Judge every message according to the rules. Return ONLY valid JSON, no explanati
         const pl = this.pluginFor(item);
         const icon = pl ? pl.icon : item.source === 'whatsapp' ? '💬' : res.importance === 'high' ? '🔴' : '📧';
         const title = item.source === 'whatsapp' ? `${icon} <b>${esc(item.from)}</b>` : `${icon} <b>${esc(item.subject)}</b>\n${item.source === 'plugin' ? esc(pl.name) + ' · ' + esc(item.from) : this.T('from') + ': ' + esc(item.from)}`;
-        let buttons;
+        let buttons = [];
         const known = this.findContact({ email: item.fromAddress, phone: item.phone });
+        const canReply = !item.plugin && ((item.source === 'whatsapp' && item.jid) || (item.source === 'mail' && item.fromAddress && !/no-?reply/i.test(item.fromAddress)));
+        if (canReply) {
+          const rid = this.saveThread(item);
+          buttons.push([{ text: this.T('replyBtn'), callback_data: 'rp:' + rid }, { text: this.T('aiReplyBtn'), callback_data: 'ar:' + rid }]);
+        }
         if (item.source === 'plugin' && item.link) {
-          buttons = [[{ text: '🔗 ' + this.T('open'), url: item.link }]];
+          buttons.push([{ text: '🔗 ' + this.T('open'), url: item.link }]);
         } else if (!known && !item.isGroup && !item.plugin && (item.fromAddress || item.phone)) {
           const cid = 'c' + crypto.randomBytes(3).toString('hex');
           const name = item.source === 'mail' ? String(item.from).replace(/<.*>/, '').replace(/"/g, '').trim() || item.fromAddress : item.from;
@@ -928,9 +1027,11 @@ Judge every message according to the rules. Return ONLY valid JSON, no explanati
           this.st.candidates[cid] = { name, email: item.fromAddress || '', phone: item.phone || '', t: Date.now() };
           const keys = Object.keys(this.st.candidates);
           if (keys.length > 50) delete this.st.candidates[keys[0]];
-          buttons = [[{ text: this.T('saveContact'), callback_data: 'ac:' + cid }]];
+          buttons.push([{ text: this.T('saveContact'), callback_data: 'ac:' + cid }]);
         }
-        await this.notify(`${urgent ? this.T('urgent') + '\n' : ''}${title}\n\n${esc(res.summary || '')}`, { urgent, buttons });
+        const preview = item.source === 'whatsapp' ? `\n\n<i>“${esc(String(item.body).slice(0, 300))}${String(item.body).length > 300 ? '…' : ''}”</i>` : '';
+        const sentMsg = await this.notify(`${urgent ? this.T('urgent') + '\n' : ''}${title}\n\n${esc(res.summary || '')}${preview}`, { urgent, buttons: buttons.length ? buttons : undefined });
+        if (canReply && sentMsg && sentMsg.telegram) this.mapMsg(sentMsg.telegram.message_id, { thread: buttons[0][0].callback_data.slice(3) });
       }
       for (const a of res.actions || []) await this.handleAction(a, item, { urgent });
     }

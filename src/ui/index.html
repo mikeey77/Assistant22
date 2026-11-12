@@ -128,7 +128,7 @@
 
         <div class="sub">
           <h2 data-i18n="wa_h"></h2>
-          <p class="muted" data-i18n="wa_lead"></p>
+          <p class="muted" data-i18n-html="wa_lead"></p>
           <div class="alert warn" data-i18n="wa_warn"></div>
           <div class="row">
             <button class="btn primary" id="btnWa" data-i18n="wa_connect"></button>
@@ -171,13 +171,13 @@
           <div class="row"><button class="btn" id="btnTestGmail" data-i18n="test_gmail"></button><button class="btn primary hidden" id="btnGmailConnect" data-i18n="connect_google"></button><span class="result" data-result="gmail"></span></div>
         </div>
         <div id="imapBox">
-        <p class="lead" data-i18n="mail_lead"></p>
+        <p class="lead" data-i18n-html="mail_lead"></p>
         <div class="grid">
           <label><span data-i18n="email"></span><input id="mailEmail" type="email" placeholder="you@example.com" /></label>
           <label><span data-i18n="password"></span><input data-path="imap.pass" type="password" data-secret="imap.pass" /></label>
         </div>
         <div class="row"><button class="btn primary" id="btnDetect" data-i18n="detect"></button><span class="result" data-result="detect"></span></div>
-        <p class="muted" data-i18n="app_pw_hint"></p>
+        <p class="muted" data-i18n-html="app_pw_hint"></p>
         <details class="howto" id="mailAdvanced">
           <summary><span data-i18n="incoming"></span> / <span data-i18n="outgoing"></span></summary>
           <h3 data-i18n="incoming"></h3>
@@ -209,7 +209,7 @@
       <!-- CALENDAR -->
       <section class="sec" data-sec="calendar">
         <h1 data-i18n="google_h"></h1>
-        <details class="howto">
+        <details class="howto" open>
           <summary data-i18n="cal_howto"></summary>
           <ol data-i18n-html="cal_steps"></ol>
         </details>
@@ -228,7 +228,7 @@
       <!-- AI -->
       <section class="sec" data-sec="ai">
         <h1 data-i18n="ai_h"></h1>
-        <p class="lead" data-i18n="ai_lead"></p>
+        <p class="lead" data-i18n-html="ai_lead"></p>
         <label class="narrow"><span data-i18n="provider"></span><select data-path="ai.provider" id="aiProvider"></select></label>
         <div id="aiPanels"></div>
         <div class="row"><button class="btn" id="btnTestAi" data-i18n="test_ai"></button><span class="result" data-result="ai"></span></div>

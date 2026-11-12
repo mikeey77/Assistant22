@@ -162,16 +162,50 @@ const press = (engine, data, chat = 42) => engine.handleUpdate({ callback_query:
   await engine.check();
   assert.strictEqual(cfg.data.state.waQueue.length, 0);
   assert.strictEqual(waSent.filter((m) => m.self).length, 0, 'geen meldingen via WhatsApp');
-  assert.ok(!sent[0].buttons, 'bekend contact: geen opslaan-knop');
+  assert.ok(!sent[0].buttons.flat().some((b) => b.callback_data.startsWith('ac:')), 'bekend contact: geen opslaan-knop');
+  assert.ok(sent[0].buttons[0][0].callback_data.startsWith('rp:'), 'antwoordknop onder WhatsApp');
+  assert.ok(sent[0].text.includes('Bij mij thuis'), 'bericht zelf zichtbaar');
+  const rpData = sent[0].buttons[0][0].callback_data;
+  const arData = sent[0].buttons[0][1].callback_data;
+  const notifMsgId = 1; // FakeTelegram: message_id = index
   const waRp = btn('WhatsApp') || btn('antwoord');
   await press(engine, waRp.buttons[0][0].callback_data);
   assert.deepStrictEqual(waSent.at(-1), { jid: '111@lid', text: 'Leuk, ik kom!' }, 'antwoord naar bekende jid');
+
+  // ---- zelf antwoorden via knop ----
+  await press(engine, rpData);
+  assert.ok(sent.at(-1).text.includes('Sanne'), 'vraagt om je antwoord');
+  await engine.handleUpdate({ message: { chat: { id: 42 }, text: 'Top, tot zaterdag!' } });
+  const own = btn('Versturen') || sent.filter((m) => m.buttons).at(-1);
+  assert.ok(own.text.includes('Top, tot zaterdag!'));
+  assert.strictEqual(own.buttons[0][0].text, '✅ Versturen');
+  await press(engine, own.buttons[0][0].callback_data);
+  assert.deepStrictEqual(waSent.at(-1), { jid: '111@lid', text: 'Top, tot zaterdag!' });
+  // swipe-reply op de melding zelf
+  const notif = sent.findIndex((m) => m.buttons && m.buttons[0][0].callback_data === rpData) + 1;
+  await engine.handleUpdate({ message: { chat: { id: 42 }, text: 'Ik kom wat later', reply_to_message: { message_id: notif } } });
+  const own2 = sent.filter((m) => m.buttons).at(-1);
+  assert.ok(own2.text.includes('Ik kom wat later'));
+  // swipe-reply op het concept = aanpassen
+  claudeAnswer = JSON.stringify({ body: 'Ik ben er rond half 8!' });
+  const own2Id = sent.lastIndexOf(own2) + 1;
+  await engine.handleUpdate({ message: { chat: { id: 42 }, text: 'zeg half 8', reply_to_message: { message_id: own2Id } } });
+  assert.ok(sent.filter((m) => m.buttons).at(-1).text.includes('half 8!'));
+  // AI-antwoord via knop
+  claudeAnswer = JSON.stringify({ body: 'Klinkt goed, ik kom!' });
+  await press(engine, arData);
+  assert.ok(sent.filter((m) => m.buttons).at(-1).text.includes('Klinkt goed'));
+  // annuleren
+  await press(engine, rpData);
+  await engine.handleUpdate({ message: { chat: { id: 42 }, text: '/annuleer' } });
+  assert.ok(sent.at(-1).text.includes('geannuleerd'));
+  for (const id of Object.keys(cfg.data.state.pending)) delete cfg.data.state.pending[id];
 
   // onbekende afzender: contact opslaan via knop
   mailQueue = [{ id: '13', from: '"Jan Jansen" <jan@x.nl>', fromAddress: 'jan@x.nl', subject: 'Vraag', date: new Date().toISOString(), body: '?', messageId: '<m3>' }];
   claudeAnswer = JSON.stringify({ items: [{ id: 'm13', notify: true, summary: 'Vraag', actions: [] }] });
   await engine.check();
-  const saveBtn = sent.at(-1).buttons[0][0];
+  const saveBtn = sent.at(-1).buttons.flat().find((b) => b.callback_data.startsWith('ac:'));
   assert.ok(saveBtn.callback_data.startsWith('ac:'));
   await press(engine, saveBtn.callback_data);
   assert.ok(cfg.data.contacts.find((c) => c.email === 'jan@x.nl' && c.name === 'Jan Jansen'));

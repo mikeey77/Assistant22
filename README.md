@@ -1,11 +1,52 @@
+<p align="center">
+  <img src="docs/img/banner.png" alt="Assistant22" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/mikeey77/Assistant22/releases/latest"><img src="https://img.shields.io/github/v/release/mikeey77/Assistant22?label=download&style=for-the-badge&color=2f6fed" alt="Download"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows" alt="Windows">
+  <img src="https://img.shields.io/badge/Telegram-bot-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram">
+  <img src="https://img.shields.io/badge/AI-Claude%20%7C%20ChatGPT%20%7C%20Grok%20%7C%20Gemini-6b4fbb?style=for-the-badge" alt="AI">
+</p>
+
 # Assistant22
 
-A simple email, WhatsApp and calendar assistant for Windows. Assistant22 checks
-your inbox and WhatsApp, lets an AI decide what matters, puts appointments in
-Google Calendar and talks to you on **Telegram**: your one place for
-notifications, approvals, sending emails or WhatsApps and changing settings.
+**Your personal assistant for email, WhatsApp and calendar.** Assistant22 reads your
+inbox and WhatsApp, lets an AI decide what matters, puts appointments in Google
+Calendar and talks to you on **Telegram**: notifications, ✅ approvals, replies,
+new emails/WhatsApps and settings, all from your phone. Nothing is sent without your OK.
 
 **[⬇️ Download the latest version](https://github.com/mikeey77/Assistant22/releases/latest)**
+
+<table>
+<tr>
+<td width="44%" valign="top"><img src="docs/img/telegram.png" alt="Telegram chat with Assistant22"></td>
+<td valign="top">
+
+### How it works
+1. 📥 **Checks** your email and WhatsApp every few minutes
+2. 🧠 **AI judges** each message using *your* rules (plain language)
+3. 📲 **Telegram message** for what matters, with the message itself and buttons
+4. 💬 **Reply** by tapping *Reply*, swiping the message, or letting the AI write it
+5. ✅ **Approve** before anything is sent or added to your calendar
+6. ☀️ **Morning overview**: agenda, weather and important messages
+
+### Talk to it
+- *"what's on tomorrow?"*
+- *"email Peter that I'll be 10 minutes late"*
+- *"whatsapp Sanne: see you tonight"*
+- *"check every 30 minutes"* · *"turn on the Upwork plugin"*
+
+</td>
+</tr>
+</table>
+
+## Screenshots
+| Dashboard | Plugins |
+|---|---|
+| ![Dashboard](docs/img/dashboard.png) | ![Plugins](docs/img/plugins.png) |
+| **Settings (dark mode)** | **Setup: Telegram** |
+| ![Settings](docs/img/settings-dark.png) | ![Setup](docs/img/setup-telegram.png) |
 
 ## Features
 - **Email**: Gmail (Google login) or any IMAP/SMTP account, settings detected from your address
@@ -16,10 +57,11 @@ notifications, approvals, sending emails or WhatsApps and changing settings.
 - **Safe mode**: everything needs your ✅. Sending messages *always* needs approval
 - Buttons: ✅ Approve · ❌ Decline · ⏰ 1 hour · ⏰ Tomorrow · ✏️ Edit (rewrite a draft in chat)
 - **VIP senders** get urgent notifications with sound; everything else arrives silently
+- **Reply from Telegram**: 💬 Reply / ✨ Write reply for me buttons under every message, or just swipe a message to reply
 - **Contacts**: in the app, from Telegram, or tap 👤 under a notification
 - **Settings from Telegram**: `/settings` buttons, or just type "check every 30 minutes"
 - **Online/offline messages**: Telegram tells you when the app closes, the PC sleeps, or it was offline unexpectedly
-- Light / dark / automatic theme (follows your device), English / Dutch
+- Light / dark / automatic theme (follows your device), English / Dutch (app *and* bot)
 - Automatic updates via GitHub Releases, or check manually from the dashboard or tray menu
 
 ## Plugins
