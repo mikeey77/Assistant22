@@ -20,7 +20,7 @@ function resolveCommand(command) {
   return found ? `"${found}"` : 'claude';
 }
 
-function runClaude(prompt, { command = 'claude', model = '', cwd, timeoutMs = 180000 } = {}) {
+function runClaude(prompt, { command = 'claude', model = '', cwd, timeoutMs = 180000, withUsage = false } = {}) {
   command = resolveCommand(command);
   return new Promise((resolve, reject) => {
     // Geen tools: Claude hoeft alleen te lezen wat we meegeven en JSON terug te geven.
@@ -49,9 +49,20 @@ function runClaude(prompt, { command = 'claude', model = '', cwd, timeoutMs = 18
       clearTimeout(timer);
       let parsed;
       try { parsed = JSON.parse(out); } catch { /* geen json */ }
-      if (parsed && typeof parsed.result === 'string' && !parsed.is_error) return resolve(parsed.result);
+      if (parsed && typeof parsed.result === 'string' && !parsed.is_error) {
+        if (!withUsage) return resolve(parsed.result);
+        const u = parsed.usage || {};
+        return resolve({
+          text: parsed.result,
+          usage: {
+            input: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0),
+            output: u.output_tokens || 0,
+            cost: parsed.total_cost_usd || 0,
+          },
+        });
+      }
       if (parsed && parsed.is_error) return reject(new Error('Claude Code fout: ' + (parsed.result || 'onbekend')));
-      if (code === 0 && out.trim()) return resolve(out.trim());
+      if (code === 0 && out.trim()) return resolve(withUsage ? { text: out.trim(), usage: { input: 0, output: 0, cost: 0 } } : out.trim());
       if (/not recognized|not found|ENOENT/i.test(err + out)) return reject(new Error('Claude Code niet gevonden. Installeer het (PowerShell: irm https://claude.ai/install.ps1 | iex), log één keer in met "claude" en herstart Postvak.'));
       reject(new Error(`Claude Code stopte met code ${code}: ${(err || out).slice(0, 400)}`));
     });

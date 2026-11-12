@@ -20,6 +20,8 @@ const sentMails = [];
 let claudeAnswer = '';
 let mailQueue = [];
 const prompts = [];
+const gmailQueue = [];
+const gmailSent = [];
 
 class FakeTelegram {
   poll() {}
@@ -44,7 +46,10 @@ const deps = {
   Telegram: FakeTelegram,
   GoogleCalendar: FakeCal,
   WhatsApp: FakeWa,
-  claude: { runClaude: async (prompt) => { prompts.push(prompt); return typeof claudeAnswer === 'function' ? claudeAnswer(prompt) : claudeAnswer; }, extractJson },
+  claude: { extractJson },
+  ai: { PROVIDERS: require('../src/services/ai').PROVIDERS, complete: async (cfg, prompt) => { prompts.push(prompt); return { text: typeof claudeAnswer === 'function' ? claudeAnswer(prompt) : claudeAnswer, usage: { input: 1000, output: 200, cost: 0.01 } }; } },
+  plugins: require('../src/plugins'),
+  Gmail: class { constructor(c) { this.cfg = c; } get ready() { return true; } async fetchNew(ts) { return ts ? { mails: gmailQueue.splice(0), lastTs: Date.now(), firstRun: false } : { mails: [], lastTs: Date.now(), firstRun: true }; } async send(m) { gmailSent.push(m); } },
   mail: {
     fetchNewMail: async (c, last) => {
       if (last == null) return { mails: [], lastUid: 10, uidValidity: '1', firstRun: true };
@@ -210,6 +215,99 @@ const press = (engine, data, chat = 42) => engine.handleUpdate({ callback_query:
   await engine.maybeDailySummary();
   assert.strictEqual(sent.length - b2, 1);
   assert.ok(sent.at(-1).text.includes('Goedemorgen'));
+
+  // ---- v0.4: verbruik ----
+  const u0 = engine.usageInfo();
+  assert.ok(u0.calls > 0 && u0.tokens === u0.calls * 1200, 'tokens geteld');
+  cfg.update({ usageLimit: { dailyTokens: u0.tokens, pause: true } });
+  claudeAnswer = JSON.stringify({ reply: 'x', actions: [] });
+  const callsBefore = prompts.length;
+  await engine.handleUpdate({ message: { chat: { id: 42 }, text: 'hoi' } });
+  assert.strictEqual(prompts.length, callsBefore, 'limiet: geen AI-aanroep');
+  assert.ok(sent.some((m) => m.text.includes('Daglimiet')));
+  cfg.update({ usageLimit: { dailyTokens: 0, pause: false } });
+  await engine.handleUpdate({ message: { chat: { id: 42 }, text: '/verbruik' } });
+  assert.ok(sent.at(-1).text.includes('tokens'));
+
+  // ---- instellingen via Telegram ----
+  await engine.handleUpdate({ message: { chat: { id: 42 }, text: '/instellingen' } });
+  const kb = sent.at(-1).buttons;
+  assert.ok(kb.flat().some((b) => b.callback_data === 'cfg:int'));
+  const int0 = cfg.data.intervalMin;
+  await press(engine, 'cfg:int');
+  assert.notStrictEqual(cfg.data.intervalMin, int0);
+  const safe0 = cfg.data.safeMode;
+  await press(engine, 'cfg:safe');
+  assert.strictEqual(cfg.data.safeMode, !safe0);
+  await press(engine, 'cfg:safe');
+  claudeAnswer = JSON.stringify({ reply: 'Gedaan', actions: [{ type: 'set_setting', key: 'intervalMin', value: '30' }, { type: 'add_rule', text: 'Meld altijd mails van school' }, { type: 'toggle_plugin', id: 'fiverr', enabled: true }, { type: 'set_setting', key: 'plugins.fiverr.profile', value: 'Ik maak websites' }] });
+  await engine.handleUpdate({ message: { chat: { id: 42 }, text: 'check elke 30 min, zet fiverr aan' } });
+  assert.strictEqual(cfg.data.intervalMin, 30);
+  assert.ok(cfg.data.rules.includes('Meld altijd mails van school'));
+  assert.strictEqual(cfg.data.plugins.fiverr.enabled, true);
+  assert.strictEqual(cfg.data.plugins.fiverr.profile, 'Ik maak websites');
+  assert.ok(prompts.at(-1).includes('PLUGINS:'));
+  // geheimen niet via chat
+  claudeAnswer = JSON.stringify({ reply: '', actions: [{ type: 'set_setting', key: 'plugins.github.token', value: 'x' }] });
+  await engine.handleUpdate({ message: { chat: { id: 42 }, text: 'zet token' } });
+  assert.ok(!cfg.data.plugins.github || !cfg.data.plugins.github.token);
+  // plugins-knoppen
+  await press(engine, 'pl:weather');
+  assert.strictEqual(cfg.data.plugins.weather.enabled, true);
+  await press(engine, 'pl:weather');
+  assert.strictEqual(cfg.data.plugins.weather.enabled, false);
+
+  // ---- plugins: Fiverr-mail + eigen plugin-items ----
+  mailQueue = [{ id: '20', from: 'Fiverr <noreply@fiverr.com>', fromAddress: 'noreply@fiverr.com', subject: 'New Brief: website', date: new Date().toISOString(), body: 'Buyer needs a site https://www.fiverr.com/briefs/123', messageId: '<f1>' }];
+  claudeAnswer = (pr) => {
+    assert.ok(pr.includes('FIVERR:') && pr.includes('Ik maak websites'), 'fiverr-hint met profiel');
+    assert.ok(pr.includes('[Fiverr email'), 'mail geclaimd');
+    return JSON.stringify({ items: [{ id: 'm20', notify: true, summary: 'Brief', actions: [{ type: 'draft_response', platform: 'Fiverr', body: 'Hi! I can build it.' }] }] });
+  };
+  await engine.check();
+  const fv = btn('Concept voor Fiverr');
+  assert.ok(fv, 'concept met goedkeuring');
+  await press(engine, fv.buttons[0][0].callback_data);
+  const copy = sent.find((m) => m.text === 'Hi! I can build it.');
+  assert.ok(copy && copy.buttons[0][0].url === 'https://www.fiverr.com/briefs/123', 'tekst + link');
+
+  const fake = { id: 'fake', icon: '🧪', name: 'Fake', settings: [], hint: () => 'FAKE HINT', async collect(ctx) { ctx.state.n = (ctx.state.n || 0) + 1; return [{ id: 'fk1', from: 'site', subject: 'Job', link: 'https://x.test/job', date: new Date().toISOString(), body: 'job text' }]; } };
+  deps.plugins.list.push(fake); deps.plugins.byId.fake = fake;
+  cfg.update({ plugins: { fake: { enabled: true } } });
+  claudeAnswer = (pr) => {
+    assert.ok(pr.includes('=== FAKE id=fk1') && pr.includes('FAKE HINT'));
+    return JSON.stringify({ items: [{ id: 'fk1', notify: true, summary: 'Leuke job', actions: [] }] });
+  };
+  await engine.check();
+  assert.strictEqual(sent.at(-1).buttons[0][0].url, 'https://x.test/job');
+  // plugin-fout: één melding
+  fake.collect = async () => { throw new Error('kapot'); };
+  const nb = sent.length;
+  claudeAnswer = JSON.stringify({ items: [] });
+  await engine.check(); await engine.check();
+  assert.strictEqual(sent.slice(nb).filter((m) => m.text.includes('kapot')).length, 1);
+  cfg.update({ plugins: { fake: { enabled: false } } });
+  assert.strictEqual(deps.plugins.byId.rss.parseFeed('<rss><item><title>Hi &amp; bye</title><link>https://a.b/1</link><guid>1</guid><description><![CDATA[<p>tekst</p>]]></description></item></rss>')[0].title, 'Hi & bye');
+
+  // ---- Gmail als mailtype ----
+  cfg.update({ mailType: 'gmail', google: { clientId: 'x', refreshToken: 'y', email: 'me@gmail.com' } });
+  await engine.check(); // startpunt
+  gmailQueue.push({ id: 'abcdef123456', threadId: 't1', from: 'Ann <ann@x.nl>', fromAddress: 'ann@x.nl', subject: 'Vraag', date: new Date().toISOString(), body: 'Kom je?', messageId: '<g1>' });
+  claudeAnswer = (pr) => JSON.stringify({ items: [{ id: pr.match(/EMAIL id=(g\w+)/)[1], notify: true, summary: 'Vraag', actions: [{ type: 'draft_reply', body: 'Ja!' }] }] });
+  await engine.check();
+  await press(engine, btn('antwoord').buttons[0][0].callback_data);
+  assert.strictEqual(gmailSent.at(-1).threadId, 't1');
+  assert.strictEqual(gmailSent.at(-1).subject, 'Re: Vraag');
+  assert.strictEqual(gmailSent.at(-1).from, 'me@gmail.com');
+
+  // ---- online / offline ----
+  cfg.data.state.running = true; cfg.data.state.lastSeen = new Date(Date.now() - 3600e3).toISOString();
+  await engine.goOnline();
+  assert.ok(sent.at(-1).text.includes('onverwacht'));
+  await engine.goOffline('closed');
+  assert.ok(sent.at(-1).text.includes('offline') && cfg.data.state.running === false);
+  await engine.goOnline();
+  assert.ok(sent.at(-1).text.includes('online'));
 
   console.log('✅ Alle engine-tests geslaagd');
   process.exit(0);

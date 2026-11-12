@@ -3,18 +3,24 @@
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:" />
-  <title>Postvak</title>
+  <title>Assistant22</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="app">
     <aside class="side">
-      <div class="brand"><img src="icon.png" alt="" /> Postvak</div>
+      <div class="brand"><img src="icon.png" alt="" /> Assistant22</div>
       <nav id="nav"></nav>
       <div class="side-foot" id="sideFoot"></div>
     </aside>
 
     <main class="main" id="main">
+      <div class="usagebar hidden" id="usageBar">
+        <span class="ub-prov" id="ubProv"></span>
+        <span class="ub-text" id="ubText"></span>
+        <span class="ub-meter hidden" id="ubMeter"><span id="ubFill"></span></span>
+        <span class="ub-month muted" id="ubMonth"></span>
+      </div>
       <!-- WELCOME -->
       <section class="sec" data-sec="welcome">
         <h1 data-i18n="welcome_h"></h1>
@@ -61,6 +67,11 @@
         <label class="inline"><input type="checkbox" data-path="quietNonUrgent" /> <span data-i18n="quiet"></span></label>
         <label class="inline"><input type="checkbox" data-path="openAtLogin" /> <span data-i18n="autostart"></span></label>
         <label class="inline"><input type="checkbox" data-path="autoUpdate" /> <span data-i18n="autoupdate"></span></label>
+        <label class="inline"><input type="checkbox" data-path="statusMessages" /> <span data-i18n="status_msgs"></span></label>
+        <div class="grid">
+          <label><span data-i18n="usage_limit"></span><input data-path="usageLimit.dailyTokens" type="number" min="0" step="10000" /></label>
+        </div>
+        <label class="inline"><input type="checkbox" data-path="usageLimit.pause" /> <span data-i18n="usage_pause"></span></label>
         <div class="row only-settings"><span class="muted"><span data-i18n="version"></span> <span id="appVersion"></span></span><button class="btn small" id="btnUpdate" data-i18n="check_updates"></button><span class="result" data-result="update"></span></div>
       </section>
 
@@ -126,9 +137,27 @@
         <label class="narrow"><span data-i18n="phone_country"></span><input data-path="phoneCountry" placeholder="31" /></label>
       </section>
 
+      <!-- PLUGINS -->
+      <section class="sec" data-sec="plugins">
+        <h1 data-i18n="plugins_h"></h1>
+        <p class="lead" data-i18n="plugins_lead"></p>
+        <div id="pluginList"></div>
+      </section>
+
       <!-- MAIL -->
       <section class="sec" data-sec="mail">
         <h1 data-i18n="mail_h"></h1>
+        <label class="narrow"><span data-i18n="mail_type"></span>
+          <select data-path="mailType" id="mailType">
+            <option value="gmail" data-i18n="mail_gmail"></option>
+            <option value="imap" data-i18n="mail_imap"></option>
+          </select>
+        </label>
+        <div id="gmailBox" class="hidden">
+          <p class="muted" data-i18n="gmail_hint"></p>
+          <div class="row"><button class="btn" id="btnTestGmail" data-i18n="test_gmail"></button><button class="btn primary hidden" id="btnGmailConnect" data-i18n="connect_google"></button><span class="result" data-result="gmail"></span></div>
+        </div>
+        <div id="imapBox">
         <p class="lead" data-i18n="mail_lead"></p>
         <div class="grid">
           <label><span data-i18n="email"></span><input id="mailEmail" type="email" placeholder="you@example.com" /></label>
@@ -161,11 +190,12 @@
         <div class="row">
           <button class="btn" data-test="smtp" data-i18n="test_smtp"></button><span class="result" data-result="smtp"></span>
         </div>
+        </div>
       </section>
 
       <!-- CALENDAR -->
       <section class="sec" data-sec="calendar">
-        <h1 data-i18n="cal_h"></h1>
+        <h1 data-i18n="google_h"></h1>
         <details class="howto">
           <summary data-i18n="cal_howto"></summary>
           <ol data-i18n-html="cal_steps"></ol>
@@ -174,6 +204,7 @@
           <label>Client ID<input data-path="google.clientId" /></label>
           <label>Client secret<input data-path="google.clientSecret" type="password" data-secret="google.clientSecret" /></label>
         </div>
+        <label class="inline"><input type="checkbox" id="googleGmail" /> <span data-i18n="google_gmail"></span></label>
         <div class="row"><button class="btn primary" id="btnGoogle" data-i18n="connect_google"></button><span class="result" data-result="google"></span></div>
         <label class="narrow"><span data-i18n="calendar_to_use"></span>
           <select data-path="google.calendarId" id="calSelect"><option value="primary">primary</option></select>
@@ -181,23 +212,13 @@
         <p class="muted" data-i18n="cal_skip"></p>
       </section>
 
-      <!-- CLAUDE -->
-      <section class="sec" data-sec="claude">
-        <h1 data-i18n="claude_h"></h1>
-        <p class="lead" data-i18n-html="claude_lead"></p>
-        <p class="muted" data-i18n-html="claude_install"></p>
-        <div class="grid">
-          <label><span data-i18n="command"></span><input data-path="claude.command" placeholder="claude" /></label>
-          <label><span data-i18n="model"></span> <span class="muted" data-i18n="model_hint"></span>
-            <select data-path="claude.model">
-              <option value="" data-i18n="model_default"></option>
-              <option value="haiku">Haiku</option>
-              <option value="sonnet">Sonnet</option>
-              <option value="opus">Opus</option>
-            </select>
-          </label>
-        </div>
-        <div class="row"><button class="btn" data-test="claude" data-i18n="test_claude"></button><span class="result" data-result="claude"></span></div>
+      <!-- AI -->
+      <section class="sec" data-sec="ai">
+        <h1 data-i18n="ai_h"></h1>
+        <p class="lead" data-i18n="ai_lead"></p>
+        <label class="narrow"><span data-i18n="provider"></span><select data-path="ai.provider" id="aiProvider"></select></label>
+        <div id="aiPanels"></div>
+        <div class="row"><button class="btn" id="btnTestAi" data-i18n="test_ai"></button><span class="result" data-result="ai"></span></div>
       </section>
 
       <footer class="bar" id="bar">

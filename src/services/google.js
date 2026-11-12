@@ -2,7 +2,8 @@
 const http = require('http');
 const crypto = require('crypto');
 
-const SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly';
+const CAL_SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly';
+const GMAIL_SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send';
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 function b64url(buf) {
@@ -10,7 +11,8 @@ function b64url(buf) {
 }
 
 // Start de login: opent de browser, wacht op de redirect, geeft refresh token terug.
-function connect({ clientId, clientSecret }, openUrl) {
+function connect({ clientId, clientSecret }, openUrl, { gmail = false } = {}) {
+  const SCOPES = gmail ? CAL_SCOPES + ' ' + GMAIL_SCOPES : CAL_SCOPES;
   return new Promise((resolve, reject) => {
     const verifier = b64url(crypto.randomBytes(32));
     const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
@@ -30,7 +32,7 @@ function connect({ clientId, clientSecret }, openUrl) {
         if (!tok.refresh_token) throw new Error('Geen refresh token ontvangen');
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end('<h2 style="font-family:sans-serif">Gelukt! Je kunt dit venster sluiten en terug naar Postvak.</h2>');
-        resolve(tok.refresh_token);
+        resolve({ refreshToken: tok.refresh_token, scope: tok.scope || SCOPES });
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end('<h2 style="font-family:sans-serif">Koppelen mislukt: ' + String(e.message).replace(/</g, '') + '</h2>');
@@ -64,7 +66,8 @@ async function tokenRequest(params) {
   return j;
 }
 
-class GoogleCalendar {
+// Gedeelde token-logica voor Agenda en Gmail.
+class GoogleAuth {
   constructor(cfg) {
     this.cfg = cfg;
     this.token = null;
@@ -84,16 +87,19 @@ class GoogleCalendar {
     return this.token;
   }
 
-  async _api(method, p, body) {
-    const r = await fetch('https://www.googleapis.com/calendar/v3' + p, {
+  async _api(method, p, body, base = 'https://www.googleapis.com/calendar/v3') {
+    const r = await fetch(base + p, {
       method,
       headers: { Authorization: 'Bearer ' + (await this._access()), 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error('Google Agenda: ' + ((j.error && j.error.message) || r.status));
+    if (!r.ok) throw new Error('Google: ' + ((j.error && j.error.message) || r.status));
     return j;
   }
+}
+
+class GoogleCalendar extends GoogleAuth {
 
   get calId() { return encodeURIComponent(this.cfg.calendarId || 'primary'); }
 
@@ -152,4 +158,4 @@ function addMinutes(s, n) {
   return `${d}T${String(Math.floor(tot / 60)).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
 }
 
-module.exports = { connect, GoogleCalendar, TZ, _test: { addDays, addMinutes, localIso } };
+module.exports = { connect, GoogleAuth, GoogleCalendar, TZ, _test: { addDays, addMinutes, localIso } };

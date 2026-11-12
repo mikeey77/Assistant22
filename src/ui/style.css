@@ -137,3 +137,18 @@ body.settings-mode .only-settings { display: flex; }
 .crow { display: grid; grid-template-columns: 1.2fr 1.6fr 1.2fr auto auto; gap: 8px; align-items: center; }
 .crow input { margin-top: 0; }
 .crow .c-vipl { margin: 0; white-space: nowrap; }
+
+/* v0.4: verbruiksbalk, plugins, AI */
+.usagebar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 14px; padding: 9px 44px; background: #fff; border-bottom: 1px solid var(--line); font-size: 13px; }
+.ub-prov { font-weight: 600; }
+.ub-meter { flex: 1; max-width: 220px; height: 8px; background: #ecebe6; border-radius: 99px; overflow: hidden; }
+.ub-meter span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width .3s; }
+.ub-meter.warn span { background: #e0a100; }
+.ub-meter.full span { background: var(--err); }
+.ub-month { margin-left: auto; }
+.plugin-head { display: flex; align-items: center; justify-content: space-between; }
+.plugin-head h2 { margin: 0; }
+.plugin.off .plugin-fields { display: none; }
+.plugin.off { opacity: .8; }
+.switch { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 600; cursor: pointer; }
+.switch input { width: 18px; height: 18px; margin: 0; }

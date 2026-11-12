@@ -8,7 +8,11 @@ contextBridge.exposeInMainWorld('postvak', {
   i18n: call('i18n:get'),
   defaultRules: call('defaults:rules'),
   appInfo: call('app:info'),
-  testClaude: call('test:claude'),
+  aiProviders: call('ai:providers'),
+  testAi: call('test:ai'),
+  pluginCatalog: call('plugins:catalog'),
+  usage: call('usage:get'),
+  testGmail: call('test:gmail'),
   detectMail: call('mail:detect'),
   testImap: call('test:imap'),
   testSmtp: call('test:smtp'),
@@ -27,6 +31,6 @@ contextBridge.exposeInMainWorld('postvak', {
   installUpdate: call('update:install'),
   openExternal: call('open:external'),
   on: (channel, fn) => {
-    if (['log', 'status', 'config', 'wa', 'update'].includes(channel)) ipcRenderer.on(channel, (_e, d) => fn(d));
+    if (['log', 'status', 'config', 'wa', 'update', 'usage'].includes(channel)) ipcRenderer.on(channel, (_e, d) => fn(d));
   },
 });

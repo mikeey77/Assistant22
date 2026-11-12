@@ -5,6 +5,12 @@ const fs = require('fs');
 const path = require('path');
 
 const SECRET_PATHS = [
+  'ai.providers.anthropic.apiKey',
+  'ai.providers.openai.apiKey',
+  'ai.providers.xai.apiKey',
+  'ai.providers.gemini.apiKey',
+  'plugins.upwork.token',
+  'plugins.github.token',
   'imap.pass',
   'smtp.pass',
   'google.clientSecret',
@@ -28,13 +34,29 @@ const DEFAULTS = {
   openAtLogin: true,
   rules: DEFAULT_RULES,
   dailySummary: { enabled: true, time: '08:00' },
-  claude: { command: 'claude', model: '' },
+  claude: { command: 'claude', model: '' }, // oud (v0.1–0.3), wordt gemigreerd naar ai
+  ai: {
+    provider: 'claude-code',
+    providers: {
+      'claude-code': { command: 'claude', model: '' },
+      codex: { command: 'codex', model: '' },
+      anthropic: { apiKey: '', model: '' },
+      openai: { apiKey: '', model: '' },
+      xai: { apiKey: '', model: '' },
+      gemini: { apiKey: '', model: '' },
+      ollama: { baseUrl: '', model: '' },
+    },
+  },
+  usageLimit: { dailyTokens: 0, pause: false },
+  statusMessages: true,
+  mailType: 'imap', // imap | gmail
+  plugins: {},
   imap: { host: '', port: 993, secure: true, user: '', pass: '', mailbox: 'INBOX' },
   smtp: { host: '', port: 465, secure: true, user: '', pass: '', fromName: '' },
   google: { clientId: '', clientSecret: '', refreshToken: '', calendarId: 'primary' },
   telegram: { token: '', chatId: null },
   whatsapp: { enabled: false, groups: false },
-  state: { lastUid: null, uidValidity: null, lastSummaryDate: null, pending: {}, recent: [], lastCheck: null, lastError: null, waQueue: [], waJids: {}, candidates: {} },
+  state: { lastUid: null, uidValidity: null, lastSummaryDate: null, pending: {}, recent: [], lastCheck: null, lastError: null, waQueue: [], waJids: {}, candidates: {}, usage: {}, plugins: {}, running: false, lastSeen: null, gmailLastTs: null },
 };
 
 function get(obj, p) {
@@ -70,6 +92,8 @@ class Config {
   _load() {
     let raw = {};
     try { raw = JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { /* eerste start */ }
+    // migratie: losse claude-instellingen → ai.providers['claude-code']
+    if (raw.claude && !raw.ai) raw.ai = { providers: { 'claude-code': { command: raw.claude.command || 'claude', model: raw.claude.model || '' } } };
     const data = deepMerge(DEFAULTS, raw);
     for (const p of SECRET_PATHS) {
       const v = get(data, p);

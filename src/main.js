@@ -1,5 +1,5 @@
 // Electron hoofdproces: tray-icoon, venster, IPC, updates en de engine.
-const { app, BrowserWindow, Tray, Menu, ipcMain, shell, safeStorage, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, shell, safeStorage, nativeImage, powerMonitor } = require('electron');
 const path = require('path');
 const { Config } = require('./config');
 const { Engine } = require('./engine');
@@ -7,8 +7,15 @@ const mail = require('./services/mail');
 const google = require('./services/google');
 const autodetect = require('./services/autodetect');
 const { Telegram } = require('./services/telegram');
-const { runClaude } = require('./services/claude');
+const ai = require('./services/ai');
+const { Gmail } = require('./services/gmail');
+const plugins = require('./plugins');
 const { STRINGS, t } = require('./i18n');
+
+// Naam is nu Assistant22, maar de gegevens blijven in de oude map zodat
+// instellingen, wachtwoorden en de WhatsApp-koppeling behouden blijven.
+app.setName('Assistant22');
+app.setPath('userData', process.env.A22_USERDATA || path.join(app.getPath('appData'), 'Postvak'));
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -45,7 +52,7 @@ function showWindow() {
     height: 760,
     minWidth: 780,
     minHeight: 560,
-    title: 'Postvak',
+    title: 'Assistant22',
     icon: ICON,
     autoHideMenuBar: true,
     backgroundColor: '#f6f5f2',
@@ -69,13 +76,13 @@ function send(channel, payload) {
 function buildTray() {
   if (!tray) {
     tray = new Tray(nativeImage.createFromPath(ICON).resize({ width: 16, height: 16 }));
-    tray.setToolTip('Postvak');
+    tray.setToolTip('Assistant22');
     tray.on('click', showWindow);
   }
   const c = config.data;
   const nl = c.language === 'nl';
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: nl ? 'Postvak openen' : 'Open Postvak', click: showWindow },
+    { label: nl ? 'Assistant22 openen' : 'Open Assistant22', click: showWindow },
     { label: nl ? 'Nu checken' : 'Check now', enabled: c.setupDone, click: () => engine.check({ manual: true }) },
     { type: 'separator' },
     {
@@ -142,19 +149,34 @@ function registerIpc() {
   ipcMain.handle('defaults:rules', wrap(() => (STRINGS[config.data.language] || STRINGS.en).defaultRules));
   ipcMain.handle('app:info', wrap(() => ({ version: app.getVersion(), packaged: app.isPackaged, update: updateState })));
 
-  ipcMain.handle('test:claude', wrap(async (c) => {
-    const opts = { ...config.data.claude, ...(c || {}) };
-    const out = await runClaude('Reply with exactly one word: OK', { command: opts.command, model: opts.model, cwd: app.getPath('userData'), timeoutMs: 90000 });
-    return out.trim().slice(0, 100);
+  ipcMain.handle('ai:providers', wrap(() => ai.PROVIDERS));
+  ipcMain.handle('test:ai', wrap(async (aiCfg) => {
+    const merged = JSON.parse(JSON.stringify(config.data.ai));
+    if (aiCfg) {
+      if (aiCfg.provider) merged.provider = aiCfg.provider;
+      for (const [k, v] of Object.entries(aiCfg.providers || {})) {
+        merged.providers[k] = { ...merged.providers[k], ...Object.fromEntries(Object.entries(v).filter(([, x]) => x !== '')) };
+      }
+    }
+    const r = await ai.complete(merged, 'Reply with exactly one word: OK', { cwd: app.getPath('userData') });
+    config.update({ ai: { providers: { [merged.provider]: { tested: true } } } });
+    return r.text.trim().slice(0, 100);
   }));
+  ipcMain.handle('plugins:catalog', wrap(() => plugins.catalog()));
+  ipcMain.handle('usage:get', wrap(() => engine.usageInfo()));
+  ipcMain.handle('test:gmail', wrap(async () => new Gmail(config.data.google).test()));
   ipcMain.handle('mail:detect', wrap((email) => autodetect.detect(email)));
   ipcMain.handle('test:imap', wrap(async (c) => mail.testImap({ ...config.data.imap, ...stripEmpty(c) })));
   ipcMain.handle('test:smtp', wrap(async (c) => mail.testSmtp({ ...config.data.smtp, ...stripEmpty(c) })));
 
   ipcMain.handle('google:connect', wrap(async (c) => {
-    config.update({ google: c });
-    const refreshToken = await google.connect(config.data.google, (url) => shell.openExternal(url));
-    config.update({ google: { refreshToken } });
+    const { gmail, ...g } = c || {};
+    config.update({ google: g });
+    const res = await google.connect(config.data.google, (url) => shell.openExternal(url), { gmail: config.data.mailType === 'gmail' || !!(c && c.gmail) });
+    config.update({ google: { refreshToken: res.refreshToken, scope: res.scope } });
+    if (/gmail/.test(res.scope)) {
+      try { const prof = await new Gmail(config.data.google).test(); config.update({ google: { email: prof.email } }); } catch { /* geen gmail */ }
+    }
     if (engine.calendar) engine.calendar = new google.GoogleCalendar(config.data.google);
     return new google.GoogleCalendar(config.data.google).listCalendars();
   }));
@@ -192,6 +214,7 @@ function registerIpc() {
     applyLogin();
     buildTray();
     engine.start();
+    engine.goOnline();
     return config.publicView();
   }));
   ipcMain.handle('setup:reset', wrap(() => {
@@ -222,7 +245,19 @@ function stripEmpty(o) {
 
 app.on('second-instance', showWindow);
 app.on('window-all-closed', () => { /* blijf draaien in de tray */ });
-app.on('before-quit', () => { quitting = true; if (engine) engine.shutdown(); });
+let offlineSent = false;
+app.on('before-quit', (e) => {
+  quitting = true;
+  if (!engine) return;
+  if (offlineSent) { engine.shutdown(); return; }
+  // eerst een offline-bericht naar Telegram, dan pas afsluiten
+  e.preventDefault();
+  offlineSent = true;
+  Promise.race([engine.goOffline('closed'), new Promise((r) => setTimeout(r, 4000))]).finally(() => {
+    engine.shutdown();
+    app.quit();
+  });
+});
 
 app.whenReady().then(async () => {
   if (process.env.POSTVAK_SELFTEST) {
@@ -246,7 +281,7 @@ app.whenReady().then(async () => {
     app.exit(0);
     return;
   }
-  app.setAppUserModelId('nl.postvak.app');
+  app.setAppUserModelId('nl.postvak.app'); // zelfde id: update installeert over de oude versie heen
   config = new Config(app.getPath('userData'), crypt());
   engine = new Engine(config, {
     workDir: path.join(app.getPath('userData'), 'werkmap'),
@@ -256,14 +291,18 @@ app.whenReady().then(async () => {
   engine.on('status', () => send('status', engine.status()));
   engine.on('config', () => { send('config', config.publicView()); buildTray(); });
   engine.on('wa', (w) => send('wa', w));
+  engine.on('usage', (u) => send('usage', u));
 
   registerIpc();
   buildTray();
   applyLogin();
   setupUpdater();
 
+  powerMonitor.on('suspend', () => { if (config.data.setupDone) engine.goOffline('sleep'); });
+  powerMonitor.on('resume', () => { if (config.data.setupDone) { engine.start(); engine.goOnline(); } });
+
   const hidden = process.argv.includes('--hidden');
-  if (config.data.setupDone) engine.start();
+  if (config.data.setupDone) { engine.start(); engine.goOnline(); }
   if (!config.data.setupDone || !hidden) showWindow();
 });
 

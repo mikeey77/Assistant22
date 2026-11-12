@@ -1,8 +1,8 @@
 {
   "name": "postvak",
-  "productName": "Postvak",
-  "version": "0.3.0",
-  "description": "Postvak: a simple email, WhatsApp and calendar assistant for Windows, powered by Claude Code and Telegram",
+  "productName": "Assistant22",
+  "version": "0.4.0",
+  "description": "Assistant22: a simple email, WhatsApp and calendar assistant for Windows, powered by AI and Telegram",
   "main": "src/main.js",
   "author": "Michael",
   "license": "UNLICENSED",
@@ -29,7 +29,7 @@
   },
   "build": {
     "appId": "nl.postvak.app",
-    "productName": "Postvak",
+    "productName": "Assistant22",
     "files": [
       "src/**/*",
       "package.json"
@@ -44,7 +44,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "artifactName": "Postvak-Setup-${version}.${ext}"
+      "artifactName": "Assistant22-Setup-${version}.${ext}",
+      "shortcutName": "Assistant22"
     },
     "publish": {
       "provider": "github",

@@ -5,9 +5,9 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 // Wizard: elke stap kan meerdere secties tonen.
 const WIZARD = [
   { key: 'welcome', label: 'step_welcome', secs: ['welcome'] },
-  { key: 'claude', label: 'step_claude', secs: ['claude'] },
+  { key: 'ai', label: 'step_ai', secs: ['ai'] },
+  { key: 'calendar', label: 'step_google', secs: ['calendar'], skippable: true },
   { key: 'mail', label: 'step_mail', secs: ['mail'] },
-  { key: 'calendar', label: 'step_calendar', secs: ['calendar'], skippable: true },
   { key: 'notify', label: 'step_notify', secs: ['notify'] },
   { key: 'safe', label: 'step_safe', secs: ['safe'] },
   { key: 'rules', label: 'step_rules', secs: ['rules', 'general'] },
@@ -15,7 +15,8 @@ const WIZARD = [
 const VIEWS = [
   { key: 'dashboard', label: 'nav_dashboard', secs: ['dashboard'] },
   { key: 'contacts', label: 'step_contacts', secs: ['contacts'] },
-  { key: 'settings', label: 'nav_settings', secs: ['general', 'safe', 'rules', 'notify', 'mail', 'calendar', 'claude'] },
+  { key: 'plugins', label: 'step_plugins', secs: ['plugins'] },
+  { key: 'settings', label: 'nav_settings', secs: ['general', 'safe', 'rules', 'notify', 'mail', 'calendar', 'ai'] },
 ];
 
 let cfg = null;
@@ -25,6 +26,10 @@ let mode = 'wizard';
 let current = null;
 let botName = '';
 let waState = { linked: false, connected: false };
+let PROVIDERS = {};
+let CATALOG = [];
+const lang = () => (cfg && cfg.language) || 'en';
+const esc = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const L = (key, vars = {}) => {
   let s = S[key] || key;
@@ -83,6 +88,8 @@ function fill() {
   }
   $('#mailEmail').value = cfg.imap.user || '';
   renderContacts();
+  showMailType();
+  showAiPanel();
   for (const b of $$('[data-safe]')) b.classList.toggle('on', String(cfg.safeMode) === b.dataset.safe);
   if (cfg.telegram.chatId) setResult('pair', L('paired'), 'ok');
   if (cfg.secretsSet['google.refreshToken']) setResult('google', L('connected'), 'ok');
@@ -210,7 +217,91 @@ function go(key) {
   $('#main').scrollTop = 0;
 }
 
+function hasGmail() { return cfg.secretsSet['google.refreshToken'] && /gmail/.test(cfg.google.scope || ''); }
+
+function showMailType() {
+  const g = $('#mailType').value === 'gmail';
+  $('#gmailBox').classList.toggle('hidden', !g);
+  $('#imapBox').classList.toggle('hidden', g);
+  $('#btnGmailConnect').classList.toggle('hidden', hasGmail());
+  if (g && hasGmail() && cfg.google.email) setResult('gmail', L('gmail_ok', { e: cfg.google.email }), 'ok');
+}
+
+// ---------- AI ----------
+function renderAi() {
+  const sel = $('#aiProvider');
+  sel.innerHTML = Object.entries(PROVIDERS).map(([id, p]) => `<option value="${id}">${esc(p.name)}</option>`).join('');
+  const box = $('#aiPanels');
+  box.innerHTML = '';
+  for (const [id, p] of Object.entries(PROVIDERS)) {
+    const base = `ai.providers.${id}`;
+    let html = '<div class="grid">';
+    if (p.kind === 'cli') html += `<label>${L('command')}<input data-path="${base}.command" placeholder="${id === 'codex' ? 'codex' : 'claude'}" /></label>`;
+    else if (!p.noKey) html += `<label>${L('api_key')}<input type="password" data-path="${base}.apiKey" data-secret="${base}.apiKey" /></label>`;
+    if (p.noKey) html += `<label>${L('base_url')}<input data-path="${base}.baseUrl" placeholder="${esc(p.base)}" /></label>`;
+    html += `<label>${L('model')}<input data-path="${base}.model" placeholder="${esc(p.defaultModel ? L('model_placeholder', { m: p.defaultModel }) : L('model_default'))}" /></label></div>`;
+    const hint = id === 'claude-code' ? L('claude_install') : id === 'codex' ? L('codex_install') : id === 'ollama' ? L('ollama_install') : p.keyUrl ? `<a href="${p.keyUrl}" data-ext>${L('get_key')} →</a>` : '';
+    if (hint) html += `<p class="muted">${hint}</p>`;
+    const div = document.createElement('div');
+    div.className = 'ai-panel hidden';
+    div.dataset.prov = id;
+    div.innerHTML = html;
+    box.appendChild(div);
+  }
+  for (const a of $$('a[data-ext]', box)) a.onclick = (e) => { e.preventDefault(); postvak.openExternal(a.href); };
+  sel.onchange = showAiPanel;
+}
+function showAiPanel() {
+  const v = $('#aiProvider').value;
+  for (const d of $$('.ai-panel')) d.classList.toggle('hidden', d.dataset.prov !== v);
+}
+
+// ---------- plugins ----------
+function renderPlugins() {
+  const box = $('#pluginList');
+  box.innerHTML = '';
+  for (const p of CATALOG) {
+    const card = document.createElement('div');
+    card.className = 'sub plugin';
+    const fields = p.settings.map((f) => {
+      const path = `plugins.${p.id}.${f.key}`;
+      const label = esc((f.label && (f.label[lang()] || f.label.en)) || f.key);
+      const help = f.help ? ` <a href="${f.help}" data-ext>↗</a>` : '';
+      if (f.type === 'textarea') return `<label>${label}${help}<textarea rows="3" data-path="${path}" placeholder="${esc(f.placeholder || '')}"></textarea></label>`;
+      return `<label>${label}${help}<input type="${f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}" data-path="${path}"${f.secret ? ` data-secret="${path}"` : ''}${f.type === 'number' ? ' data-num' : ''} placeholder="${esc(f.placeholder || '')}" /></label>`;
+    }).join('');
+    card.innerHTML = `<div class="plugin-head"><h2>${p.icon} ${esc(p.name)}</h2><label class="switch"><input type="checkbox" data-path="plugins.${p.id}.enabled" /><span>${L('enabled')}</span></label></div>
+      <p class="muted">${esc(p.description[lang()] || p.description.en)}</p><div class="plugin-fields">${fields}</div>`;
+    box.appendChild(card);
+    const toggle = $('input[type=checkbox]', card);
+    const sync = () => card.classList.toggle('off', !toggle.checked);
+    toggle.addEventListener('change', sync);
+    setTimeout(sync);
+  }
+  for (const a of $$('a[data-ext]', box)) a.onclick = (e) => { e.preventDefault(); postvak.openExternal(a.href); };
+}
+
+// ---------- verbruik ----------
+function fmtNum(n) { n = Number(n) || 0; return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n); }
+function showUsage(u) {
+  if (!u) return;
+  $('#usageBar').classList.remove('hidden');
+  $('#ubProv').textContent = '🧠 ' + (u.providerName || '');
+  $('#ubText').textContent = `${L('usage_today')}: ${fmtNum(u.tokens)} tokens · ${u.calls} ${L('calls')}${u.cost ? ` · $${u.cost.toFixed(2)}` : ''}`;
+  $('#ubMonth').textContent = `${L('usage_month')}: ${fmtNum(u.monthTokens)}${u.monthCost ? ` · $${u.monthCost.toFixed(2)}` : ''}`;
+  const m = $('#ubMeter');
+  m.classList.toggle('hidden', !u.limit);
+  if (u.limit) {
+    const f = Math.min(1, u.tokens / u.limit);
+    $('#ubFill').style.width = (f * 100).toFixed(1) + '%';
+    m.className = 'ub-meter' + (f >= 1 ? ' full' : f >= 0.8 ? ' warn' : '');
+    m.title = `${fmtNum(u.tokens)} / ${fmtNum(u.limit)}`;
+  }
+}
+async function refreshUsage() { const r = await postvak.usage(); if (r.ok) showUsage(r.data); }
+
 function validate(key) {
+  if (key === 'mail' && cfg.mailType === 'gmail') return hasGmail() ? null : L('gmail_hint');
   if (key === 'mail' && !(cfg.imap.host && cfg.imap.user && cfg.secretsSet['imap.pass'])) return L('err_mail');
   if (key === 'notify' && !cfg.telegram.chatId) return L('need_channel');
   return null;
@@ -259,13 +350,11 @@ async function runTest(kind, btn) {
   btn.disabled = true;
   let r;
   try {
-    if (kind === 'claude') r = await postvak.testClaude(data.claude);
     if (kind === 'imap') r = await postvak.testImap(data.imap);
     if (kind === 'smtp') r = await postvak.testSmtp(data.smtp);
     if (kind === 'telegram') r = await postvak.telegramTest(data.telegram.token);
   } finally { btn.disabled = false; }
   if (!r.ok) return setResult(kind, '❌ ' + r.error, 'err');
-  if (kind === 'claude') setResult(kind, L('claude_ok', { r: r.data }), 'ok');
   if (kind === 'imap') setResult(kind, L('imap_ok', { n: r.data.messages }), 'ok');
   if (kind === 'smtp') setResult(kind, L('smtp_ok'), 'ok');
   if (kind === 'telegram') { botName = r.data.username; setResult(kind, `✅ @${r.data.username}`, 'ok'); }
@@ -294,6 +383,8 @@ async function connectGoogle() {
   if (!data.clientSecret && !cfg.secretsSet['google.clientSecret']) return toast(L('err_client_secret'), true);
   if (!data.clientSecret) delete data.clientSecret;
   setResult('google', L('login_browser'), 'busy');
+  data.gmail = $('#googleGmail').checked || cfg.mailType === 'gmail';
+  if ($('#googleGmail').checked) await postvak.saveConfig({ mailType: 'gmail' });
   const r = await postvak.googleConnect(data);
   if (!r.ok) return setResult('google', '❌ ' + r.error, 'err');
   const c = await postvak.getConfig();
@@ -375,7 +466,11 @@ function showUpdate(u) {
 async function init() {
   const r = await postvak.getConfig();
   cfg = r.data;
+  PROVIDERS = (await postvak.aiProviders()).data;
+  CATALOG = (await postvak.pluginCatalog()).data;
   await loadLang(cfg.language || 'en');
+  renderAi();
+  renderPlugins();
   mode = cfg.setupDone ? 'settings' : 'wizard';
   fill();
 
@@ -383,6 +478,21 @@ async function init() {
   if (info.ok) { $('#appVersion').textContent = info.data.version; showUpdate(info.data.update); }
 
   $('#btnNext').onclick = next;
+  $('#mailType').onchange = showMailType;
+  $('#btnTestAi').onclick = async () => {
+    const data = collect($('[data-sec="ai"]')).ai;
+    setResult('ai', '…', 'busy');
+    const t = await postvak.testAi(data);
+    setResult('ai', t.ok ? L('ai_ok', { r: t.data }) : '❌ ' + t.error, t.ok ? 'ok' : 'err');
+    refreshUsage();
+  };
+  $('#btnTestGmail').onclick = async () => {
+    const t = await postvak.testGmail();
+    setResult('gmail', t.ok ? L('gmail_ok', { e: t.data.email }) : '❌ ' + t.error, t.ok ? 'ok' : 'err');
+  };
+  $('#btnGmailConnect').onclick = () => { $('#googleGmail').checked = true; go('calendar'); };
+  postvak.on('usage', showUsage);
+  refreshUsage();
   $('#btnBack').onclick = () => { const l = list(); go(l[Math.max(0, l.findIndex((s) => s.key === current) - 1)].key); };
   $('#btnSkip').onclick = () => { const l = list(); go(l[l.findIndex((s) => s.key === current) + 1].key); };
   for (const b of $$('[data-test]')) b.onclick = () => runTest(b.dataset.test, b);
@@ -432,7 +542,10 @@ async function init() {
       if (!r2.ok) return;
       cfg = r2.data;
       await loadLang(cfg.language);
+      renderAi();
+      renderPlugins();
       fill();
+      refreshUsage();
       go(current);
     };
   }
