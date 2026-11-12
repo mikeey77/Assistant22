@@ -279,6 +279,10 @@ app.whenReady().then(async () => {
       const B = await import('baileys');
       require('qrcode'); require('imapflow'); require('electron-updater');
       console.log('SELFTEST OK', typeof B.makeWASocket);
+      if (process.env.A22_PDF) {
+        const att = await require('./services/attachments').readAttachments([{ filename: 'x.pdf', contentType: 'application/pdf', content: require('fs').readFileSync(process.env.A22_PDF) }]);
+        console.log('SELFTEST PDF', JSON.stringify(att));
+      }
       if (process.env.POSTVAK_SELFTEST === 'wa') {
         const { WhatsApp } = require('./services/whatsapp');
         const wa = new WhatsApp(path.join(app.getPath('temp'), 'pv-wa-selftest'));

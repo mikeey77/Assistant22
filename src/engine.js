@@ -20,9 +20,10 @@ const { TZ } = require('./services/google');
 const { t, pack } = require('./i18n');
 
 const PENDING_MAX_AGE = 7 * 24 * 3600 * 1000;
-const ACTIONS = ['create_event', 'draft_reply', 'send_email', 'send_whatsapp', 'add_contact', 'draft_response', 'set_setting', 'add_rule', 'add_vip', 'toggle_plugin'];
+const ACTIONS = ['create_event', 'draft_reply', 'send_email', 'send_whatsapp', 'add_contact', 'draft_response', 'set_setting', 'add_rule', 'add_vip', 'toggle_plugin', 'track_package'];
 const NEEDS_OK = ['draft_reply', 'send_email', 'send_whatsapp', 'draft_response']; // berichten versturen: altijd eerst vragen
-const DIRECT = ['add_contact', 'set_setting', 'add_rule', 'add_vip', 'toggle_plugin']; // instellingen: direct uitvoeren
+const DIRECT = ['add_contact', 'set_setting', 'add_rule', 'add_vip', 'toggle_plugin', 'track_package']; // direct uitvoeren
+const PKG_ICON = { ordered: '🧾', shipped: '📤', in_transit: '🚚', out_for_delivery: '🛵', delivered: '✅', problem: '⚠️' };
 const EDITABLE = NEEDS_OK;
 const INTERVALS = [5, 15, 30, 60];
 
@@ -185,6 +186,87 @@ class Engine extends EventEmitter {
     this.waInfo = null;
   }
 
+  // ---------- pakketten ----------
+  pkgKey(a) {
+    const code = String(a.code || '').replace(/\s+/g, '').toLowerCase();
+    if (code) return code;
+    return String(a.title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 40);
+  }
+
+  pkgLine(p) {
+    const eta = p.eta && p.status !== 'delivered' ? ` · ${this.T('pkgEta')}: ${esc(/^\d{4}-\d\d-\d\d$/.test(p.eta) ? this.fmtWhen(p.eta, null, true).replace(/ \(.*\)$/, '') : p.eta)}` : '';
+    return `${PKG_ICON[p.status] || '📦'} <b>${esc(p.title || p.code)}</b>${p.carrier ? ' (' + esc(p.carrier) + ')' : ''}\n${this.T('pkg_' + (PKG_ICON[p.status] ? p.status : 'in_transit'))}${eta}`;
+  }
+
+  async trackPackage(a) {
+    if (this.c.packages === false) return null;
+    this.st.packages = this.st.packages || {};
+    const key = this.pkgKey(a);
+    if (!key) return null;
+    // ook matchen op titel als de code later pas bekend wordt
+    let p = this.st.packages[key] || Object.values(this.st.packages).find((x) => a.title && x.title && x.title.toLowerCase() === String(a.title).toLowerCase());
+    const status = PKG_ICON[a.status] ? a.status : 'in_transit';
+    const isNew = !p;
+    if (p && p.status === status && (p.eta || '') === (a.eta || '')) return null; // niets nieuws
+    p = p || {};
+    Object.assign(p, {
+      carrier: a.carrier || p.carrier || '', code: a.code || p.code || '', title: a.title || p.title || '',
+      status, eta: a.eta || p.eta || '', link: a.link || p.link || '', updated: Date.now(),
+    });
+    this.st.packages[this.pkgKey(p)] = p;
+    if (key !== this.pkgKey(p)) delete this.st.packages[key];
+    const buttons = p.link ? [[{ text: '🔗 ' + this.T('pkgTrack'), url: p.link }]] : undefined;
+    const head = isNew ? this.T('pkgNew') : this.T('pkgUpdate');
+    const r = await this.notify(`${head}\n${this.pkgLine(p)}`, { buttons, replyTo: p.msgId, loud: status === 'out_for_delivery' || status === 'delivered' || status === 'problem' });
+    if (r && r.telegram && isNew) p.msgId = r.telegram.message_id;
+    this.config.save();
+    return null;
+  }
+
+  activePackages() {
+    const week = 7 * 24 * 3600 * 1000;
+    return Object.values(this.st.packages || {}).filter((p) => p.status !== 'delivered' || Date.now() - p.updated < 2 * 24 * 3600 * 1000).filter((p) => Date.now() - p.updated < 4 * week);
+  }
+
+  // ---------- spam ----------
+  async offerSpamDelete(items) {
+    if (!items.length || this.c.spamCheck === false) return;
+    this.st.spam = this.st.spam || {};
+    const sid = 's' + crypto.randomBytes(3).toString('hex');
+    this.st.spam[sid] = items.map((i) => ({ uid: i.uid, gid: i.gid, subject: i.subject, from: i.from, fromAddress: i.fromAddress, t: Date.now() }));
+    const keys = Object.keys(this.st.spam);
+    if (keys.length > 30) delete this.st.spam[keys[0]];
+    const list = items.slice(0, 10).map((i) => `• <b>${esc(i.subject)}</b> — ${esc(i.fromAddress || i.from)}`).join('\n');
+    await this.notify(`${this.T('spamFound', { n: items.length })}\n${list}`, {
+      buttons: [[{ text: this.T('deleteSpam', { n: items.length }), callback_data: 'sd:' + sid }, { text: this.T('notSpam'), callback_data: 'sk:' + sid }]],
+    });
+  }
+
+  async deleteSpam(sid) {
+    const list = (this.st.spam && this.st.spam[sid]) || [];
+    delete this.st.spam[sid];
+    this.config.save();
+    if (this.c.mailType === 'gmail') {
+      try { await this.gmail().trash(list.map((x) => x.gid).filter(Boolean)); } catch (e) {
+        if (/insufficient|scope|403/i.test(e.message)) throw new Error(this.T('needGmailModify'));
+        throw e;
+      }
+    } else {
+      await this.deps.mail.trashMessages(this.c.imap, list.map((x) => x.uid).filter(Boolean));
+    }
+    this.addLog(`Spam deleted: ${list.length}`);
+    return list.length;
+  }
+
+  keepSpam(sid) {
+    const list = (this.st.spam && this.st.spam[sid]) || [];
+    delete this.st.spam[sid];
+    const senders = [...new Set(list.map((x) => x.fromAddress).filter(Boolean))];
+    if (senders.length) this.config.update({ rules: (this.c.rules || '').trim() + '\n- ' + this.T('notSpamRule', { s: senders.join(', ') }) });
+    this.config.save();
+    this.emit('config');
+  }
+
   // ---------- antwoorden vanuit Telegram ----------
   saveThread(item) {
     this.st.threads = this.st.threads || {};
@@ -250,8 +332,8 @@ Write the reply the user would send${th.source === 'whatsapp' ? ' (short and inf
     if (!this.tg) return;
     const nl = this.lang === 'nl';
     const cmds = nl
-      ? [['check', 'Nu checken'], ['vandaag', 'Agenda van vandaag'], ['instellingen', 'Instellingen'], ['plugins', 'Plugins aan/uit'], ['contacten', 'Je contacten'], ['verbruik', 'Tokenverbruik'], ['status', 'Status'], ['help', 'Hulp']]
-      : [['check', 'Check now'], ['today', 'Today\'s agenda'], ['settings', 'Settings'], ['plugins', 'Plugins on/off'], ['contacts', 'Your contacts'], ['usage', 'Token usage'], ['status', 'Status'], ['help', 'Help']];
+      ? [['check', 'Nu checken'], ['vandaag', 'Agenda van vandaag'], ['instellingen', 'Instellingen'], ['plugins', 'Plugins aan/uit'], ['contacten', 'Je contacten'], ['pakketten', 'Pakketten onderweg'], ['verbruik', 'Tokenverbruik'], ['status', 'Status'], ['help', 'Hulp']]
+      : [['check', 'Check now'], ['today', 'Today\'s agenda'], ['settings', 'Settings'], ['plugins', 'Plugins on/off'], ['contacts', 'Your contacts'], ['packages', 'Packages on the way'], ['usage', 'Token usage'], ['status', 'Status'], ['help', 'Help']];
     try { await this.tg.call('setMyCommands', { commands: cmds.map(([command, description]) => ({ command, description })) }); } catch { /* niet erg */ }
   }
 
@@ -412,9 +494,9 @@ Write the reply the user would send${th.source === 'whatsapp' ? ' (short and inf
 
   // ---------- versturen ----------
   // Telegram is het enige kanaal waarmee Postvak met jou praat.
-  async sendTo(_channel, html, { buttons, silent = false } = {}) {
+  async sendTo(_channel, html, { buttons, silent = false, replyTo } = {}) {
     if (!this.tg || !this.c.telegram.chatId) return null;
-    try { return await this.tg.send(this.c.telegram.chatId, html, buttons, { silent }); } catch (e) { this.addLog('Telegram: ' + e.message, 'error'); return null; }
+    try { return await this.tg.send(this.c.telegram.chatId, html, buttons, { silent, replyTo }); } catch (e) { this.addLog('Telegram: ' + e.message, 'error'); return null; }
   }
 
   channels() { return this.tg && this.c.telegram.chatId ? ['telegram'] : []; }
@@ -516,6 +598,11 @@ Write the reply the user would send${th.source === 'whatsapp' ? ' (short and inf
       case 'usage':
       case 'verbruik':
         return this.reply(channel, this.usageText());
+      case 'packages':
+      case 'pakketten': {
+        const list = this.activePackages();
+        return this.reply(channel, `📦 <b>${this.T('packages')}</b>\n` + (list.length ? list.map((p) => this.pkgLine(p)).join('\n\n') : this.T('noPackages')));
+      }
       case 'contacts':
       case 'contacten':
         return this.reply(channel, `👥 <b>${this.T('contacts')}</b>\n${esc(this.contactsText())}`);
@@ -539,6 +626,22 @@ Write the reply the user would send${th.source === 'whatsapp' ? ' (short and inf
     const [kind, id] = String(cb.data || '').split(':');
     if (kind === 'cfg') return this.handleSettingsButton(cb, id);
     if (kind === 'rp') { await this.tg.answerCallback(cb.id, '✍️'); return this.startReply(id); }
+    if (kind === 'sd' || kind === 'sk') {
+      if (!this.st.spam || !this.st.spam[id]) return this.tg.answerCallback(cb.id, this.T('handled'));
+      const head = esc(cb.message.text || '');
+      if (kind === 'sk') {
+        this.keepSpam(id);
+        await this.tg.answerCallback(cb.id, '✅');
+        return this.tg.edit(cb.message.chat.id, cb.message.message_id, head + '\n\n<i>' + this.T('spamKept') + '</i>');
+      }
+      await this.tg.answerCallback(cb.id, '🗑️');
+      try {
+        const n = await this.deleteSpam(id);
+        return this.tg.edit(cb.message.chat.id, cb.message.message_id, head + '\n\n🗑️ <i>' + this.T('spamDeleted', { n }) + '</i>');
+      } catch (e) {
+        return this.tg.edit(cb.message.chat.id, cb.message.message_id, head + '\n\n' + this.T('failed', { err: esc(e.message) }));
+      }
+    }
     if (kind === 'ar') { await this.tg.answerCallback(cb.id, '✨'); await this.notify(this.T('writing')); return this.aiReply(id); }
     if (kind === 'pl') {
       const on = !(this.c.plugins[id] && this.c.plugins[id].enabled);
@@ -651,6 +754,7 @@ Write the reply the user would send${th.source === 'whatsapp' ? ' (short and inf
       }
       return this.T('copyPaste', { p: action.platform || (pl && pl.name) || 'website' });
     }
+    if (action.type === 'track_package') return this.trackPackage(action);
     if (action.type === 'set_setting') return this.applySetting(action.key, action.value);
     if (action.type === 'add_rule') {
       this.config.update({ rules: (this.c.rules || '').trim() + '\n- ' + String(action.text).trim() });
@@ -757,6 +861,7 @@ Write the reply the user would send${th.source === 'whatsapp' ? ' (short and inf
     if (action.type === 'create_event' && !action.start) return;
     if (action.type === 'draft_reply' && !action.body) return;
     if (action.type === 'add_contact' && !action.name) return;
+    if (action.type === 'track_package' && (!action.title && !action.code)) return;
     if (action.type === 'draft_response' && !action.body) return;
     if (action.type === 'send_email' || action.type === 'send_whatsapp') {
       if (!action.body || !action.to) return;
@@ -771,6 +876,7 @@ Write the reply the user would send${th.source === 'whatsapp' ? ' (short and inf
     } else {
       try {
         const res = await this.execute(action, item);
+        if (res == null) return;
         await this.notify(`✅ ${esc(res)}${action.type === 'create_event' ? '\n🕒 ' + esc(this.fmtWhen(action.start, action.end, action.allDay)) : ''}`);
       } catch (e) {
         await this.notify(this.T('couldNot', { err: esc(e.message) }), { loud: true });
@@ -986,11 +1092,16 @@ NEW MESSAGES:
 ${items.map(block).join('\n\n')}${hints}
 
 Judge every message according to the rules. Return ONLY valid JSON, no explanation, in this format:
-{"items":[{"id":"<id>","notify":true,"urgent":false,"importance":"high|normal|low","summary":"1-2 short sentences","actions":[
+{"items":[{"id":"<id>","notify":true,"urgent":false,"spam":false,"importance":"high|normal|low","summary":"1-2 short sentences","actions":[
   {"type":"create_event","title":"...","start":"YYYY-MM-DDTHH:MM or YYYY-MM-DD","end":"same format","allDay":false,"location":"","reason":"short reason"},
   {"type":"draft_reply","body":"full reply text"},
-  {"type":"draft_response","platform":"Upwork|Fiverr|...","body":"text the user will paste on the website"}
+  {"type":"draft_response","platform":"Upwork|Fiverr|...","body":"text the user will paste on the website"},
+  {"type":"track_package","carrier":"PostNL|DHL|DPD|UPS|GLS|...","code":"tracking code or order number","title":"what was ordered + shop","status":"ordered|shipped|in_transit|out_for_delivery|delivered|problem","eta":"YYYY-MM-DD or empty","link":"tracking url or empty"}
 ]}]}
+- "spam": true for spam, phishing or unwanted marketing the user would delete without reading (not for normal newsletters they signed up for, not for shipping or invoices).
+- INVOICES/BILLS (also in attachments): the summary must state the amount and due date, and add an all-day create_event on the due date titled like "💶 Pay <company> €<amount>" (in the user's language).
+- ORDERS/SHIPPING/DELIVERY (PostNL, DHL, DPD, UPS, GLS, Amazon, bol, web shops): add one track_package action and set "notify": false (Assistant22 sends package updates itself).
+- Attachments are included in the message text after "--- ATTACHMENT:".
 - "notify": true only if I should see this message.
 - "urgent": true only if it needs my attention right away.
 - "actions": empty list if nothing needs doing. Don't add an appointment that is already in the calendar.
@@ -1000,10 +1111,16 @@ Judge every message according to the rules. Return ONLY valid JSON, no explanati
     const raw = await this.ai(prompt);
     const data = this.deps.claude.extractJson(raw);
     const byId = Object.fromEntries(items.map((m) => [m.id, m]));
+    const spam = [];
     for (const res of data.items || []) {
       const item = byId[String(res.id || res.mailId)];
       if (!item) continue;
       const vip = this.isVip(item);
+      if (res.spam && !vip && item.source === 'mail' && (item.uid || item.gid)) {
+        spam.push(item);
+        this.st.recent.push({ date: item.date, source: 'mail', from: item.from, subject: item.subject || '', summary: 'spam', importance: 'low', notified: false });
+        continue;
+      }
       const urgent = vip || !!res.urgent;
       const notifyIt = vip || !!res.notify;
       this.st.recent.push({ date: item.date, source: item.source, from: item.from, subject: item.subject || '', summary: res.summary || '', importance: urgent ? 'high' : res.importance || 'normal', notified: notifyIt });
@@ -1035,6 +1152,7 @@ Judge every message according to the rules. Return ONLY valid JSON, no explanati
       }
       for (const a of res.actions || []) await this.handleAction(a, item, { urgent });
     }
+    await this.offerSpamDelete(spam);
     this.st.recent = this.st.recent.slice(-50);
   }
 
@@ -1145,6 +1263,8 @@ Write emails and WhatsApps in the language that fits the recipient. Sending alwa
     const ml = msgs.length ? msgs.map((m) => `• ${m.source === 'whatsapp' ? '💬' : '📧'} <b>${esc(m.subject || m.from)}</b> — ${esc(m.summary)}`).join('\n') : this.T('noImportant');
     const pend = Object.keys(this.st.pending).length;
     const extra = [];
+    const pk = this.activePackages().filter((p) => p.status !== 'delivered');
+    if (pk.length) extra.push(`\n📦 <b>${this.T('packages')}</b>\n` + pk.map((p) => `• ${PKG_ICON[p.status] || '📦'} ${esc(p.title || p.code)}${p.eta ? ' · ' + esc(p.eta) : ''}`).join('\n'));
     for (const p of this.plugins().filter((x) => x.dailyBrief)) {
       try { const line = await p.dailyBrief(this.pluginCtx(p)); if (line) extra.push(line); } catch (e) { this.addLog(`${p.name}: ${e.message}`, 'error'); }
     }

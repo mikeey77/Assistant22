@@ -1,7 +1,7 @@
 {
   "name": "postvak",
   "productName": "Assistant22",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Assistant22: a simple email, WhatsApp and calendar assistant for Windows, powered by AI and Telegram",
   "main": "src/main.js",
   "author": "Michael",
@@ -19,6 +19,7 @@
     "imapflow": "^1.0.164",
     "mailparser": "^3.7.1",
     "nodemailer": "^6.9.14",
+    "pdfjs-dist": "^5.4.296",
     "pino-abstract-transport": "^2.0.0",
     "pino-std-serializers": "^7.1.0",
     "qrcode": "^1.5.4"
@@ -32,7 +33,12 @@
     "productName": "Assistant22",
     "files": [
       "src/**/*",
-      "package.json"
+      "package.json",
+      "!**/*.map",
+      "!node_modules/pdfjs-dist/web/**",
+      "!node_modules/pdfjs-dist/build/**",
+      "!node_modules/pdfjs-dist/image_decoders/**",
+      "!node_modules/pdfjs-dist/types/**"
     ],
     "win": {
       "target": [

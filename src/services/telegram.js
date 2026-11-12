@@ -19,8 +19,9 @@ class Telegram {
 
   getMe() { return this.call('getMe'); }
 
-  send(chatId, text, buttons, { silent = false, forceReply } = {}) {
+  send(chatId, text, buttons, { silent = false, forceReply, replyTo } = {}) {
     const params = { chat_id: chatId, text: text.slice(0, 4000), parse_mode: 'HTML', disable_web_page_preview: true, disable_notification: !!silent };
+    if (replyTo) params.reply_parameters = { message_id: replyTo, allow_sending_without_reply: true };
     if (buttons) params.reply_markup = { inline_keyboard: buttons };
     else if (forceReply) params.reply_markup = { force_reply: true, input_field_placeholder: String(forceReply).slice(0, 64) };
     return this.call('sendMessage', params);

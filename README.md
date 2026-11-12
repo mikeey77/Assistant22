@@ -58,6 +58,9 @@ new emails/WhatsApps and settings, all from your phone. Nothing is sent without 
 - Buttons: ✅ Approve · ❌ Decline · ⏰ 1 hour · ⏰ Tomorrow · ✏️ Edit (rewrite a draft in chat)
 - **VIP senders** get urgent notifications with sound; everything else arrives silently
 - **Reply from Telegram**: 💬 Reply / ✨ Write reply for me buttons under every message, or just swipe a message to reply
+- **Reads attachments**: PDF invoices are summarized with amount and due date, and the due date goes in your calendar
+- **Package tracking**: shipping emails (PostNL, DHL, DPD, UPS, Amazon…) become one package with updates (on its way → out for delivery → delivered), `/packages`
+- **Spam cleanup**: spam is grouped in one message with a 🗑️ *Delete* button (moves to trash) or ✅ *Not spam*
 - **Contacts**: in the app, from Telegram, or tap 👤 under a notification
 - **Settings from Telegram**: `/settings` buttons, or just type "check every 30 minutes"
 - **Online/offline messages**: Telegram tells you when the app closes, the PC sleeps, or it was offline unexpectedly
@@ -87,6 +90,7 @@ and register it in `src/plugins/index.js`.
 | `/check` | Check now |
 | `/today` (`/vandaag`) | Today's agenda |
 | `/contacts` (`/contacten`) | Your contacts |
+| `/packages` (`/pakketten`) | Packages on the way |
 | `/settings` (`/instellingen`) | Settings with buttons |
 | `/plugins` | Plugins on/off |
 | `/usage` (`/verbruik`) | Token usage |
@@ -136,7 +140,8 @@ src/config.js              Settings (secrets encrypted with Windows DPAPI)
 src/plugins/               Optional plugins (Upwork, Fiverr, watcher, RSS, weather, GitHub)
 src/services/ai.js         AI providers + token usage
 src/services/mail.js       IMAP read, SMTP send
-src/services/gmail.js      Gmail API read/send
+src/services/gmail.js      Gmail API read/send/trash
+src/services/attachments.js Read PDF/text attachments
 src/services/autodetect.js Find IMAP/SMTP settings from an email address
 src/services/google.js     Google OAuth + Calendar
 src/services/telegram.js   Telegram Bot API (long polling)

@@ -57,7 +57,9 @@ const DEFAULTS = {
   telegram: { token: '', chatId: null },
   whatsapp: { enabled: false, groups: false, quickCheck: true },
   theme: 'auto', // auto | light | dark
-  state: { lastUid: null, uidValidity: null, lastSummaryDate: null, pending: {}, recent: [], lastCheck: null, lastError: null, waQueue: [], waJids: {}, candidates: {}, usage: {}, plugins: {}, running: false, lastSeen: null, gmailLastTs: null },
+  spamCheck: true,
+  packages: true,
+  state: { lastUid: null, uidValidity: null, lastSummaryDate: null, pending: {}, recent: [], lastCheck: null, lastError: null, waQueue: [], waJids: {}, candidates: {}, usage: {}, plugins: {}, running: false, lastSeen: null, gmailLastTs: null, packages: {}, spam: {} },
 };
 
 function get(obj, p) {

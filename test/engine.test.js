@@ -22,6 +22,8 @@ let mailQueue = [];
 const prompts = [];
 const gmailQueue = [];
 const gmailSent = [];
+const trashed = [];
+const gmailTrashed = [];
 
 class FakeTelegram {
   poll() {}
@@ -49,7 +51,7 @@ const deps = {
   claude: { extractJson },
   ai: { PROVIDERS: require('../src/services/ai').PROVIDERS, complete: async (cfg, prompt) => { prompts.push(prompt); return { text: typeof claudeAnswer === 'function' ? claudeAnswer(prompt) : claudeAnswer, usage: { input: 1000, output: 200, cost: 0.01 } }; } },
   plugins: require('../src/plugins'),
-  Gmail: class { constructor(c) { this.cfg = c; } get ready() { return true; } async fetchNew(ts) { return ts ? { mails: gmailQueue.splice(0), lastTs: Date.now(), firstRun: false } : { mails: [], lastTs: Date.now(), firstRun: true }; } async send(m) { gmailSent.push(m); } },
+  Gmail: class { constructor(c) { this.cfg = c; } get ready() { return true; } async fetchNew(ts) { return ts ? { mails: gmailQueue.splice(0), lastTs: Date.now(), firstRun: false } : { mails: [], lastTs: Date.now(), firstRun: true }; } async send(m) { gmailSent.push(m); } async trash(ids) { gmailTrashed.push(...ids); return ids.length; } },
   mail: {
     fetchNewMail: async (c, last) => {
       if (last == null) return { mails: [], lastUid: 10, uidValidity: '1', firstRun: true };
@@ -58,6 +60,7 @@ const deps = {
     },
     sendReply: async (c, r) => { replies.push(r); },
     sendMail: async (c, r) => { sentMails.push(r); },
+    trashMessages: async (c, uids) => { trashed.push(...uids); return uids.length; },
   },
 };
 const btn = (filter) => sent.filter((s) => s.buttons && (!filter || s.text.includes(filter))).at(-1);
@@ -323,6 +326,53 @@ const press = (engine, data, chat = 42) => engine.handleUpdate({ callback_query:
   cfg.update({ plugins: { fake: { enabled: false } } });
   assert.strictEqual(deps.plugins.byId.rss.parseFeed('<rss><item><title>Hi &amp; bye</title><link>https://a.b/1</link><guid>1</guid><description><![CDATA[<p>tekst</p>]]></description></item></rss>')[0].title, 'Hi & bye');
 
+  // ---- v0.6: bijlagen, pakketten, spam ----
+  const { readAttachments } = require('../src/services/attachments');
+  const pdfPath = require('path').join(__dirname, 'fixtures', 'factuur.pdf');
+  if (fs.existsSync(pdfPath)) {
+    const att = await readAttachments([{ filename: 'factuur.pdf', contentType: 'application/pdf', content: fs.readFileSync(pdfPath) }]);
+    assert.ok(att[0] && att[0].text.includes('84,20'), 'pdf gelezen');
+  }
+  mailQueue = [
+    { id: '30', uid: 30, from: 'Energie BV <factuur@energie.nl>', fromAddress: 'factuur@energie.nl', subject: 'Je factuur', date: new Date().toISOString(), body: 'Zie bijlage\n\n--- ATTACHMENT: factuur.pdf ---\nTotaal: EUR 84,20 Vervaldatum: 20-11-2026', messageId: '<i1>' },
+    { id: '31', uid: 31, from: 'PostNL <noreply@postnl.nl>', fromAddress: 'noreply@postnl.nl', subject: 'Je pakket is onderweg', date: new Date().toISOString(), body: '3SABC123', messageId: '<p1>' },
+    { id: '32', uid: 32, from: 'Win <prize@scam.biz>', fromAddress: 'prize@scam.biz', subject: 'Je hebt gewonnen!!!', date: new Date().toISOString(), body: 'klik hier', messageId: '<s1>' },
+    { id: '33', uid: 33, from: 'Casino <x@casino.biz>', fromAddress: 'x@casino.biz', subject: 'Gratis spins', date: new Date().toISOString(), body: 'spins', messageId: '<s2>' },
+  ];
+  cfg.update({ safeMode: false });
+  claudeAnswer = (pr) => {
+    assert.ok(pr.includes('track_package') && pr.includes('INVOICES'), 'prompt kent pakketten/facturen');
+    return JSON.stringify({ items: [
+      { id: 'm30', notify: true, summary: 'Factuur €84,20, betalen voor 20 nov', actions: [{ type: 'create_event', title: '💶 Energie BV betalen €84,20', start: '2026-11-20', allDay: true }] },
+      { id: 'm31', notify: false, summary: 'Pakket', actions: [{ type: 'track_package', carrier: 'PostNL', code: '3SABC123', title: 'Koptelefoon (bol)', status: 'in_transit', eta: '2026-11-14', link: 'https://postnl.nl/t/3SABC123' }] },
+      { id: 'm32', spam: true, notify: false, summary: 'spam', actions: [] },
+      { id: 'm33', spam: true, notify: false, summary: 'spam', actions: [] },
+    ] });
+  };
+  const createdBefore = created.length;
+  sent.length = 0;
+  await engine.check();
+  assert.ok(created.slice(createdBefore).some((e) => e.title.includes('84,20') && e.allDay), 'vervaldatum in agenda');
+  const pkgMsg = sent.find((m) => m.text.includes('Nieuw pakket'));
+  assert.ok(pkgMsg && pkgMsg.text.includes('Koptelefoon') && pkgMsg.buttons[0][0].url.includes('postnl'), 'pakketmelding met link');
+  const spamMsg = sent.find((m) => m.text.includes('spam (2)'));
+  assert.ok(spamMsg, 'spam samengevat');
+  await press(engine, spamMsg.buttons[0][0].callback_data);
+  assert.deepStrictEqual(trashed, [32, 33], 'spam naar prullenbak');
+  // zelfde pakketstatus: geen nieuw bericht; nieuwe status: update als reply
+  const n1 = sent.length;
+  await engine.trackPackage({ carrier: 'PostNL', code: '3SABC123', title: 'Koptelefoon (bol)', status: 'in_transit', eta: '2026-11-14' });
+  assert.strictEqual(sent.length, n1);
+  await engine.trackPackage({ carrier: 'PostNL', code: '3sabc123', status: 'delivered' });
+  assert.ok(sent.at(-1).text.includes('Pakket-update') && sent.at(-1).text.includes('Bezorgd'));
+  await engine.handleUpdate({ message: { chat: { id: 42 }, text: '/pakketten' } });
+  assert.ok(sent.at(-1).text.includes('Koptelefoon'));
+  // geen spam: regel onthouden
+  await engine.offerSpamDelete([{ uid: 40, subject: 'Nieuwsbrief', from: 'Club', fromAddress: 'info@club.nl' }]);
+  await press(engine, sent.at(-1).buttons[0][1].callback_data);
+  assert.ok(cfg.data.rules.includes('info@club.nl'));
+  cfg.update({ safeMode: true });
+
   // ---- Gmail als mailtype ----
   cfg.update({ mailType: 'gmail', google: { clientId: 'x', refreshToken: 'y', email: 'me@gmail.com' } });
   await engine.check(); // startpunt
@@ -333,6 +383,9 @@ const press = (engine, data, chat = 42) => engine.handleUpdate({ callback_query:
   assert.strictEqual(gmailSent.at(-1).threadId, 't1');
   assert.strictEqual(gmailSent.at(-1).subject, 'Re: Vraag');
   assert.strictEqual(gmailSent.at(-1).from, 'me@gmail.com');
+  await engine.offerSpamDelete([{ gid: 'gm1', subject: 'Spam', from: 'x', fromAddress: 'x@y.z' }]);
+  await press(engine, sent.at(-1).buttons[0][0].callback_data);
+  assert.deepStrictEqual(gmailTrashed, ['gm1'], 'gmail spam naar prullenbak');
 
   // ---- online / offline ----
   cfg.data.state.running = true; cfg.data.state.lastSeen = new Date(Date.now() - 3600e3).toISOString();

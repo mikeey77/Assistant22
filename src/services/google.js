@@ -3,7 +3,7 @@ const http = require('http');
 const crypto = require('crypto');
 
 const CAL_SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly';
-const GMAIL_SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send';
+const GMAIL_SCOPES = 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send';
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 function b64url(buf) {
