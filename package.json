@@ -1,0 +1,61 @@
+{
+  "name": "postvak",
+  "productName": "Postvak",
+  "version": "0.3.0",
+  "description": "Postvak: a simple email, WhatsApp and calendar assistant for Windows, powered by Claude Code and Telegram",
+  "main": "src/main.js",
+  "author": "Michael",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/engine.test.js",
+    "dist": "electron-builder --win nsis",
+    "dist:portable": "electron-builder --win portable",
+    "release": "electron-builder --win nsis --publish always"
+  },
+  "dependencies": {
+    "baileys": "^7.0.0-rc14",
+    "electron-updater": "^6.8.11",
+    "imapflow": "^1.0.164",
+    "mailparser": "^3.7.1",
+    "nodemailer": "^6.9.14",
+    "pino-abstract-transport": "^2.0.0",
+    "pino-std-serializers": "^7.1.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "nl.postvak.app",
+    "productName": "Postvak",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "Postvak-Setup-${version}.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "mikeey77",
+      "repo": "Assistant22",
+      "releaseType": "release"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mikeey77/Assistant22.git"
+  },
+  "homepage": "https://github.com/mikeey77/Assistant22"
+}

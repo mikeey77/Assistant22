@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:" />
+  <title>Postvak</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand"><img src="icon.png" alt="" /> Postvak</div>
+      <nav id="nav"></nav>
+      <div class="side-foot" id="sideFoot"></div>
+    </aside>
+
+    <main class="main" id="main">
+      <!-- WELCOME -->
+      <section class="sec" data-sec="welcome">
+        <h1 data-i18n="welcome_h"></h1>
+        <p class="lead" data-i18n="welcome_lead"></p>
+        <ul class="checks">
+          <li data-i18n="welcome_1"></li>
+          <li data-i18n="welcome_2"></li>
+          <li data-i18n="welcome_3"></li>
+          <li data-i18n="welcome_4"></li>
+        </ul>
+        <label class="narrow"><span data-i18n="language"></span><select class="langPick"></select></label>
+        <p class="muted" data-i18n="welcome_time"></p>
+      </section>
+
+      <!-- DASHBOARD -->
+      <section class="sec" data-sec="dashboard">
+        <h1 data-i18n="dash_h"></h1>
+        <div class="cards">
+          <div class="card"><div class="k" data-i18n="last_check"></div><div class="v" id="stLast">–</div></div>
+          <div class="card"><div class="k" data-i18n="safe_mode"></div><div class="v" id="stSafe">–</div></div>
+          <div class="card"><div class="k" data-i18n="waiting"></div><div class="v" id="stPending">–</div></div>
+          <div class="card"><div class="k">WhatsApp</div><div class="v" id="stWa">–</div></div>
+        </div>
+        <div class="alert err hidden" id="stError"></div>
+        <div class="alert info hidden" id="stUpdate"><span id="stUpdateText"></span> <button class="btn small hidden" id="btnRestart" data-i18n="restart_now"></button></div>
+        <div class="row"><button class="btn primary" id="btnCheck" data-i18n="check_now"></button></div>
+        <h3 data-i18n="log"></h3>
+        <div class="log" id="log"></div>
+      </section>
+
+      <!-- GENERAL -->
+      <section class="sec" data-sec="general">
+        <h1 data-i18n="general_h"></h1>
+        <div class="grid">
+          <label><span data-i18n="language"></span><select class="langPick"></select></label>
+          <label><span data-i18n="interval"></span>
+            <select data-path="intervalMin" data-num>
+              <option value="5">5</option><option value="15">15</option><option value="30">30</option><option value="60">60</option>
+            </select>
+          </label>
+          <label><span data-i18n="daily_at"></span><input data-path="dailySummary.time" type="time" /></label>
+        </div>
+        <label class="inline"><input type="checkbox" data-path="dailySummary.enabled" /> <span data-i18n="daily_on"></span></label>
+        <label class="inline"><input type="checkbox" data-path="quietNonUrgent" /> <span data-i18n="quiet"></span></label>
+        <label class="inline"><input type="checkbox" data-path="openAtLogin" /> <span data-i18n="autostart"></span></label>
+        <label class="inline"><input type="checkbox" data-path="autoUpdate" /> <span data-i18n="autoupdate"></span></label>
+        <div class="row only-settings"><span class="muted"><span data-i18n="version"></span> <span id="appVersion"></span></span><button class="btn small" id="btnUpdate" data-i18n="check_updates"></button><span class="result" data-result="update"></span></div>
+      </section>
+
+      <!-- SAFE MODE -->
+      <section class="sec" data-sec="safe">
+        <h1 data-i18n="safe_h"></h1>
+        <p class="lead" data-i18n="safe_lead"></p>
+        <div class="choice">
+          <button class="opt" data-safe="true"><b data-i18n="safe_yes"></b><span data-i18n="safe_yes_d"></span></button>
+          <button class="opt" data-safe="false"><b data-i18n="safe_no"></b><span data-i18n="safe_no_d"></span></button>
+        </div>
+        <p class="muted" data-i18n-html="safe_note"></p>
+      </section>
+
+      <!-- RULES -->
+      <section class="sec" data-sec="rules">
+        <h1 data-i18n="rules_h"></h1>
+        <label><span data-i18n="rules_label"></span> <span class="muted" data-i18n="rules_hint"></span>
+          <textarea data-path="rules" rows="8"></textarea>
+        </label>
+        <div class="row"><button class="btn small" id="btnResetRules" data-i18n="reset_rules"></button></div>
+        <label><span data-i18n="vip_label"></span> <span class="muted" data-i18n="vip_hint"></span>
+          <textarea data-path="vip" rows="3" placeholder="boss@company.com&#10;Mom&#10;+31 6 12345678"></textarea>
+        </label>
+      </section>
+
+      <!-- NOTIFICATIONS -->
+      <section class="sec" data-sec="notify">
+        <h1 data-i18n="notify_h"></h1>
+        <p class="lead" data-i18n="notify_lead"></p>
+        <div class="sub">
+          <h2 data-i18n="tg_h"></h2>
+          <ol class="steps" data-i18n-html="tg_steps"></ol>
+          <label><span data-i18n="bot_token"></span><input data-path="telegram.token" type="password" data-secret="telegram.token" placeholder="123456:ABC-..." /></label>
+          <div class="row">
+            <button class="btn" data-test="telegram" data-i18n="test_token"></button>
+            <button class="btn primary" id="btnPair" data-i18n="pair"></button>
+            <button class="btn" id="btnTestMsg" data-i18n="send_test"></button>
+          </div>
+          <div class="row"><span class="result" data-result="telegram"></span><span class="result" data-result="pair"></span><span class="result" data-result="testmsg"></span></div>
+        </div>
+
+        <div class="sub">
+          <h2 data-i18n="wa_h"></h2>
+          <p class="muted" data-i18n="wa_lead"></p>
+          <div class="alert warn" data-i18n="wa_warn"></div>
+          <div class="row">
+            <button class="btn primary" id="btnWa" data-i18n="wa_connect"></button>
+            <button class="btn" id="btnWaLogout" data-i18n="wa_unlink"></button>
+            <span class="result" data-result="wa"></span>
+          </div>
+          <div class="qr hidden" id="waQr"><img id="waQrImg" alt="QR" /><p class="muted" data-i18n="wa_scan"></p></div>
+          <label class="inline"><input type="checkbox" data-path="whatsapp.groups" /> <span data-i18n="wa_groups"></span></label>
+        </div>
+      </section>
+
+      <!-- CONTACTS -->
+      <section class="sec" data-sec="contacts">
+        <h1 data-i18n="contacts_h"></h1>
+        <p class="lead" data-i18n="contacts_lead"></p>
+        <div class="contacts" id="contactsList"></div>
+        <div class="row"><button class="btn" id="btnAddContact" data-i18n="c_add"></button></div>
+        <label class="narrow"><span data-i18n="phone_country"></span><input data-path="phoneCountry" placeholder="31" /></label>
+      </section>
+
+      <!-- MAIL -->
+      <section class="sec" data-sec="mail">
+        <h1 data-i18n="mail_h"></h1>
+        <p class="lead" data-i18n="mail_lead"></p>
+        <div class="grid">
+          <label><span data-i18n="email"></span><input id="mailEmail" type="email" placeholder="you@example.com" /></label>
+          <label><span data-i18n="password"></span><input data-path="imap.pass" type="password" data-secret="imap.pass" /></label>
+        </div>
+        <div class="row"><button class="btn primary" id="btnDetect" data-i18n="detect"></button><span class="result" data-result="detect"></span></div>
+        <p class="muted" data-i18n="app_pw_hint"></p>
+        <details class="howto" id="mailAdvanced">
+          <summary><span data-i18n="incoming"></span> / <span data-i18n="outgoing"></span></summary>
+          <h3 data-i18n="incoming"></h3>
+          <div class="grid">
+            <label><span data-i18n="server"></span><input data-path="imap.host" placeholder="imap.example.com" /></label>
+            <label><span data-i18n="port"></span><input data-path="imap.port" type="number" /></label>
+            <label><span data-i18n="user"></span><input data-path="imap.user" /></label>
+          </div>
+          <label class="inline"><input type="checkbox" data-path="imap.secure" /> <span data-i18n="ssl"></span></label>
+          <h3><span data-i18n="outgoing"></span> <span class="muted" data-i18n="outgoing_hint"></span></h3>
+          <div class="grid">
+            <label><span data-i18n="server"></span><input data-path="smtp.host" placeholder="smtp.example.com" /></label>
+            <label><span data-i18n="port"></span><input data-path="smtp.port" type="number" /></label>
+            <label><span data-i18n="user"></span><input data-path="smtp.user" /></label>
+            <label><span data-i18n="password"></span><input data-path="smtp.pass" type="password" data-secret="smtp.pass" /></label>
+            <label><span data-i18n="from_name"></span><input data-path="smtp.fromName" /></label>
+          </div>
+          <label class="inline"><input type="checkbox" data-path="smtp.secure" /> <span data-i18n="ssl_smtp"></span></label>
+        </details>
+        <div class="row">
+          <button class="btn" data-test="imap" data-i18n="test_imap"></button><span class="result" data-result="imap"></span>
+        </div>
+        <div class="row">
+          <button class="btn" data-test="smtp" data-i18n="test_smtp"></button><span class="result" data-result="smtp"></span>
+        </div>
+      </section>
+
+      <!-- CALENDAR -->
+      <section class="sec" data-sec="calendar">
+        <h1 data-i18n="cal_h"></h1>
+        <details class="howto">
+          <summary data-i18n="cal_howto"></summary>
+          <ol data-i18n-html="cal_steps"></ol>
+        </details>
+        <div class="grid">
+          <label>Client ID<input data-path="google.clientId" /></label>
+          <label>Client secret<input data-path="google.clientSecret" type="password" data-secret="google.clientSecret" /></label>
+        </div>
+        <div class="row"><button class="btn primary" id="btnGoogle" data-i18n="connect_google"></button><span class="result" data-result="google"></span></div>
+        <label class="narrow"><span data-i18n="calendar_to_use"></span>
+          <select data-path="google.calendarId" id="calSelect"><option value="primary">primary</option></select>
+        </label>
+        <p class="muted" data-i18n="cal_skip"></p>
+      </section>
+
+      <!-- CLAUDE -->
+      <section class="sec" data-sec="claude">
+        <h1 data-i18n="claude_h"></h1>
+        <p class="lead" data-i18n-html="claude_lead"></p>
+        <p class="muted" data-i18n-html="claude_install"></p>
+        <div class="grid">
+          <label><span data-i18n="command"></span><input data-path="claude.command" placeholder="claude" /></label>
+          <label><span data-i18n="model"></span> <span class="muted" data-i18n="model_hint"></span>
+            <select data-path="claude.model">
+              <option value="" data-i18n="model_default"></option>
+              <option value="haiku">Haiku</option>
+              <option value="sonnet">Sonnet</option>
+              <option value="opus">Opus</option>
+            </select>
+          </label>
+        </div>
+        <div class="row"><button class="btn" data-test="claude" data-i18n="test_claude"></button><span class="result" data-result="claude"></span></div>
+      </section>
+
+      <footer class="bar" id="bar">
+        <button class="btn" id="btnBack" data-i18n="back"></button>
+        <span class="spacer"></span>
+        <button class="btn" id="btnSkip" data-i18n="skip"></button>
+        <button class="btn primary" id="btnNext" data-i18n="next"></button>
+      </footer>
+    </main>
+  </div>
+  <div class="toast hidden" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
